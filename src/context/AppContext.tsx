@@ -240,11 +240,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             : undefined,
           options: primaryFac
-            ? [
-                `Confirm Slot: ${primaryFac.leadDoctor} • ${primaryFac.earliestSlot}`,
-                '📍 Ona Vituo / Other Options',
-                '🩺 Nahitaji daktari leo',
-              ]
+            ? (languagePreference === 'eng'
+                ? [
+                    `Confirm Slot: ${primaryFac.leadDoctor} • ${primaryFac.earliestSlot.replace(/Leo\s*/gi, 'Today at ').replace(/Kesho\s*/gi, 'Tomorrow at ')}`,
+                    '📍 View Nearby Facilities',
+                    '🩺 I need a doctor today',
+                  ]
+                : languagePreference === 'swa'
+                ? [
+                    `Thibitisha Nafasi: ${primaryFac.leadDoctor} • ${primaryFac.earliestSlot}`,
+                    '📍 Ona Vituo Vingine',
+                    '🩺 Nahitaji daktari leo',
+                  ]
+                : [
+                    `Confirm Slot: ${primaryFac.leadDoctor} • ${primaryFac.earliestSlot}`,
+                    '📍 Ona Vituo / Other Options',
+                    '🩺 Nahitaji daktari leo',
+                  ])
             : undefined,
         };
 
@@ -353,27 +365,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(err => console.warn('Background backend booking sync error:', err));
 
     // Add confirmation feedback card directly to conversation
+    const isEng = languagePreference === 'eng';
+    const isSwa = languagePreference === 'swa';
+    const isTomorrow = pendingBooking.slot.toLowerCase().includes('kesho') || pendingBooking.slot.toLowerCase().includes('tomorrow');
+
     const confirmationMsg: ChatMessage = {
       id: `msg-${Date.now() + 1}`,
       sender: 'assistant',
-      text: `Hongera! Miadi yako imethibitishwa rasmi na ${pendingBooking.doctor} katika ${pendingBooking.hospital}. Nambari yako ya geti ni ${token}.`,
+      text: isEng
+        ? `Congratulations! Your appointment has been officially confirmed with ${pendingBooking.doctor} at ${pendingBooking.hospital}. Your digital gate pass token is ${token}.`
+        : isSwa
+        ? `Hongera! Miadi yako imethibitishwa rasmi na ${pendingBooking.doctor} katika ${pendingBooking.hospital}. Nambari yako ya geti ni ${token}.`
+        : `Hongera! Your appointment has been confirmed with ${pendingBooking.doctor} at ${pendingBooking.hospital}. Gate pass token: ${token}.`,
       timestamp: timeNow,
-      triageLevel: 'Confirmed',
-      dialectTag: 'Miadi Imethibitishwa',
+      triageLevel: isEng ? 'Confirmed' : 'Imethibitishwa',
+      dialectTag: isEng ? 'APPOINTMENT CONFIRMED' : isSwa ? 'MIADI IMETHIBITISHWA' : 'SWA + ENG CONFIRMATION',
       feedbackCard: {
         type: 'appointment_confirmed',
         doctorName: pendingBooking.doctor,
         department: 'General Consultation',
         facilityName: pendingBooking.hospital,
-        date: 'Kesho, Jumanne 24 Sept',
-        time: pendingBooking.slot,
+        date: isEng
+          ? (isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Today, Sunday 20 Sept')
+          : (isTomorrow ? 'Kesho, Jumanne 24 Sept' : 'Leo, Jumapili 20 Sept'),
+        time: isEng
+          ? pendingBooking.slot.replace(/Leo\s*/gi, 'Today at ').replace(/Kesho\s*/gi, 'Tomorrow at ')
+          : pendingBooking.slot,
         requestId: token,
       },
     };
     setChatMessages(prev => [...prev, confirmationMsg]);
 
     setIsBookingSheetOpen(false);
-    showToast(`✓ Miadi Imethibitishwa! Pass: ${token} (SMS & Pass imetumwa)`);
+    showToast(isEng ? `✓ Appointment Confirmed! Pass: ${token} (SMS & Pass sent)` : `✓ Miadi Imethibitishwa! Pass: ${token} (SMS & Pass imetumwa)`);
     setActivePatientTab('miadi');
   };
 

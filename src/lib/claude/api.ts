@@ -396,23 +396,36 @@ export async function simulateClaudeAgentLoop(
   let dialectTag = 'SWA + ENG CODE-SWITCH';
   const lower = userText.toLowerCase();
 
-  if (languagePreference === 'swa') {
-    dialectTag = 'KISWAHILI PEKEE';
-    finalText = `Nimekuelewa vizuri. ${pathway.explanationSwahili} Nimepata vituo ${facilities.length} vilivyo karibu nawe hapa ${primaryFacility.subCounty} vyenye nafasi ya daktari ${leadDoctor} (${earliestSlot}). Je, ungependa kuthibitisha nafasi hii?`;
-  } else if (languagePreference === 'eng') {
+  const isTomorrow = earliestSlot.toLowerCase().includes('kesho') || earliestSlot.toLowerCase().includes('tomorrow');
+  const cleanSlot = earliestSlot.replace(/Leo\s*|Kesho\s*|Today\s*|Tomorrow\s*/gi, '').trim();
+
+  let formattedDate = 'Tomorrow, Tuesday 24 Sept';
+  let formattedTime = `Tomorrow at ${cleanSlot}`;
+  let statusText = 'Verified Slot';
+
+  if (languagePreference === 'eng') {
     dialectTag = 'ENGLISH';
-    finalText = `I understand what you are experiencing. ${pathway.explanationEnglish} I found ${facilities.length} healthcare centers near you in ${primaryFacility.subCounty} with consultation slots available with ${leadDoctor} (${earliestSlot}). Would you like to confirm this slot?`;
+    formattedDate = isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Today, Sunday 20 Sept';
+    formattedTime = isTomorrow ? `Tomorrow at ${cleanSlot}` : `Today at ${cleanSlot}`;
+    statusText = 'Verified Slot';
+    finalText = `I have received your request regarding ${pathway.department.toLowerCase()}. ${pathway.explanationEnglish} I found ${facilities.length} healthcare facilities near you in ${primaryFacility.subCounty} with consultation slots available. Dr. ${leadDoctor} at ${primaryFacility.name} is available ${formattedTime}. Would you like to book this appointment?`;
+  } else if (languagePreference === 'swa') {
+    dialectTag = 'KISWAHILI PEKEE';
+    formattedDate = isTomorrow ? 'Kesho, Jumanne 24 Sept' : 'Leo, Jumapili 20 Sept';
+    formattedTime = isTomorrow ? `Kesho ${cleanSlot}` : `Leo ${cleanSlot}`;
+    statusText = 'Nafasi Imethibitishwa';
+    finalText = `Nimekuelewa vizuri kuhusu ${pathway.department}. ${pathway.explanationSwahili} Nimepata vituo ${facilities.length} vilivyo karibu nawe hapa ${primaryFacility.subCounty} vyenye nafasi ya daktari ${leadDoctor} (${formattedTime}). Je, ungependa kuthibitisha miadi hii katika hospitali ya ${primaryFacility.name}?`;
   } else {
     // Kenyan Code-Switching (Sheng / Swahili + English)
     dialectTag = 'SWA + ENG CODE-SWITCH';
-    if (lower.includes('kichwa') || lower.includes('headache') || lower.includes('dizzy')) {
-      finalText = `Pole sana. Nimekuelewa vizuri: maumivu ya kichwa na kizunguzungu yanaweza kuhitaji uchunguzi wa daktari. I have detected ${facilities.length} healthcare centers nearby. Daktari ${leadDoctor} katika ${primaryFacility.name} ana nafasi leo saa ${earliestSlot}.`;
-    } else if (lower.includes('tumbo') || lower.includes('stomach') || lower.includes('fever')) {
-      finalText = `Pole sana kwa maumivu ya tumbo. Nimetambua kuwa una maumivu yanayoendelea. Kuna nafasi ya daktari ${leadDoctor} katika ${primaryFacility.name} leo saa ${earliestSlot}.`;
-    } else if (lower.includes('mtoto') || lower.includes('baby') || lower.includes('child')) {
-      finalText = `Pole sana. Mtoto anahitaji uangalizi wa idara ya Pediatrics. Nimepata nafasi ya haraka katika ${primaryFacility.name} na ${leadDoctor} saa ${earliestSlot}.`;
+    formattedDate = isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Leo, Jumapili 20 Sept';
+    formattedTime = isTomorrow ? `Kesho at ${cleanSlot}` : `Leo at ${cleanSlot}`;
+    statusText = 'Verified Slot';
+    const userHasSwahili = /nimekuwa|nahisi|tumbo|kichwa|daktari|kesho|leo|homa|mtoto|masikio|jino|ngozi|kuona/i.test(lower);
+    if (!userHasSwahili) {
+      finalText = `Pole sana, I understand what you are experiencing. ${pathway.explanationEnglish} I found ${facilities.length} nearby healthcare centers in ${primaryFacility.subCounty}. Dr. ${leadDoctor} at ${primaryFacility.name} has an open slot ${formattedTime}. Would you like to book this consultation?`;
     } else {
-      finalText = `Nimekuelewa vizuri. Mfumo wa AfyaConnect umeunganishwa na vituo vya afya vilivyo karibu nawe. Daktari ${leadDoctor} anaweza kukuona katika ${primaryFacility.name} saa ${earliestSlot}.`;
+      finalText = `Pole sana, nimekuelewa vizuri: ${pathway.explanationSwahili} Nimepata vituo ${facilities.length} vya afya vilivyo karibu. Daktari ${leadDoctor} katika ${primaryFacility.name} ana nafasi ${formattedTime}. Je, ungependa kuthibitisha miadi hii?`;
     }
   }
 
@@ -420,11 +433,11 @@ export async function simulateClaudeAgentLoop(
   const feedbackCard: FeedbackCardData = {
     type: 'doctor_availability',
     department: pathway.department,
-    requestedTime: 'Tomorrow morning / Leo',
-    statusText: 'Verified Slot',
+    requestedTime: languagePreference === 'eng' ? (isTomorrow ? 'Tomorrow' : 'Today') : (isTomorrow ? 'Kesho' : 'Leo'),
+    statusText,
     doctorName: leadDoctor,
-    date: 'Kesho, Jumanne 24 Sept',
-    time: earliestSlot,
+    date: formattedDate,
+    time: formattedTime,
     facilityName: primaryFacility.name,
     requestId: careRequestRes.createdCareRequest?.id || `#${Math.floor(10487 + Math.random() * 500)}`,
   };

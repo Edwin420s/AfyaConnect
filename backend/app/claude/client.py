@@ -260,41 +260,55 @@ def orchestrate_patient_turn(
                     live_claude_used = True
                     break
 
+    # Format slot and date labels strictly according to language preference
+    is_tomorrow = "kesho" in earliest_slot.lower() or "tomorrow" in earliest_slot.lower()
+    clean_slot_time = earliest_slot.replace("Leo ", "").replace("Kesho ", "").replace("Today ", "").replace("Tomorrow ", "")
+
+    if language_preference == "eng":
+        dialect_tag = "ENGLISH"
+        date_label = "Tomorrow, Tuesday 24 Sept" if is_tomorrow else "Today, Sunday 20 Sept"
+        time_label = f"Tomorrow at {clean_slot_time}" if is_tomorrow else f"Today at {clean_slot_time}"
+        status_label = "Verified Slot"
+    elif language_preference == "swa":
+        dialect_tag = "KISWAHILI PEKEE"
+        date_label = "Kesho, Jumanne 24 Sept" if is_tomorrow else "Leo, Jumapili 20 Sept"
+        time_label = f"Kesho {clean_slot_time}" if is_tomorrow else f"Leo {clean_slot_time}"
+        status_label = "Nafasi Imethibitishwa"
+    else:
+        dialect_tag = "SWA + ENG CODE-SWITCH"
+        date_label = "Tomorrow, Tuesday 24 Sept" if is_tomorrow else "Leo, Jumapili 20 Sept"
+        time_label = f"Kesho at {clean_slot_time}" if is_tomorrow else f"Leo at {clean_slot_time}"
+        status_label = "Verified Slot"
+
     if not live_claude_used:
-        if language_preference == "swa":
-            dialect_tag = "KISWAHILI PEKEE"
+        if language_preference == "eng":
             ai_text = (
-                f"Nimekuelewa vizuri. {pathway['explanationSwahili']} Nimepata vituo {len(nearby)} vilivyo karibu nawe "
-                f"hapa {primary_facility.get('subCounty', 'Nairobi')} vyenye nafasi ya daktari {lead_doc} leo au kesho."
+                f"I understand what you are experiencing regarding your {pathway['department'].lower()}. "
+                f"{pathway['explanationEnglish']} I found {len(nearby)} healthcare facilities near you "
+                f"in {primary_facility.get('subCounty', 'Nairobi')} with consultation slots available. "
+                f"Dr. {lead_doc} at {primary_facility['name']} is available {time_label}. Would you like to book this appointment?"
             )
-        elif language_preference == "eng":
-            dialect_tag = "ENGLISH"
+        elif language_preference == "swa":
             ai_text = (
-                f"I understand what you are experiencing. {pathway['explanationEnglish']} I found {len(nearby)} healthcare "
-                f"facilities near you with consultation slots available with {lead_doc}."
+                f"Nimekuelewa vizuri kuhusu {pathway['department']}. {pathway['explanationSwahili']} "
+                f"Nimepata vituo {len(nearby)} vilivyo karibu nawe hapa {primary_facility.get('subCounty', 'Nairobi')} "
+                f"vyenye nafasi ya daktari. Daktari {lead_doc} katika {primary_facility['name']} ana nafasi {time_label}. "
+                f"Je, ungependa kuthibitisha miadi hii?"
             )
         else:
-            dialect_tag = "SWA + ENG CODE-SWITCH"
-            if "kichwa" in lower or "headache" in lower or "dizzy" in lower:
+            # Code-switching: detect if user predominantly typed in English or Swahili
+            user_has_swahili = any(sw in lower for sw in ["nimekuwa", "nahisi", "tumbo", "kichwa", "daktari", "kesho", "leo", "homa", "mtoto", "masikio", "jino", "ngozi", "kuona"])
+            if not user_has_swahili:
                 ai_text = (
-                    f"Pole sana. Nimekuelewa vizuri: maumivu ya kichwa na kizunguzungu yanaweza kuhitaji uchunguzi wa daktari. "
-                    f"Nimepata vituo {len(nearby)} vilivyo karibu. Daktari {lead_doc} katika {primary_facility['name']} "
-                    f"ana nafasi kesho saa {earliest_slot}."
-                )
-            elif "tumbo" in lower or "stomach" in lower or "fever" in lower:
-                ai_text = (
-                    f"Pole sana kwa maumivu ya tumbo. Nimetambua kuwa una maumivu yanayoendelea. Kuna nafasi ya daktari "
-                    f"{lead_doc} katika {primary_facility['name']} saa {earliest_slot}."
-                )
-            elif "mtoto" in lower or "baby" in lower or "child" in lower:
-                ai_text = (
-                    f"Pole sana. Mtoto anahitaji uangalizi wa idara ya watoto. Nimepata nafasi ya haraka katika "
-                    f"{primary_facility['name']} na {lead_doc} saa {earliest_slot}."
+                    f"Pole sana, I understand what you are experiencing. {pathway['explanationEnglish']} "
+                    f"I found {len(nearby)} nearby healthcare facilities in {primary_facility.get('subCounty', 'Nairobi')}. "
+                    f"Dr. {lead_doc} at {primary_facility['name']} has an open slot {time_label}. Would you like to book this consultation?"
                 )
             else:
                 ai_text = (
-                    f"Nimekuelewa vizuri. Mfumo wa AfyaConnect umeunganishwa na vituo vya afya vilivyo karibu nawe. "
-                    f"Daktari {lead_doc} anaweza kukuona katika {primary_facility['name']} saa {earliest_slot}."
+                    f"Pole sana, nimekuelewa vizuri: {pathway['explanationSwahili']} "
+                    f"Nimepata vituo {len(nearby)} vilivyo karibu hapa Nairobi. "
+                    f"Daktari {lead_doc} katika {primary_facility['name']} ana nafasi {time_label}. Je, ungependa kuthibitisha miadi hii?"
                 )
 
     # 7. Feedback Card Data
@@ -302,10 +316,11 @@ def orchestrate_patient_turn(
         "type": "doctor_availability",
         "department": pathway["department"],
         "doctorName": lead_doc,
-        "date": "Kesho, Jumanne 24 Sept",
-        "time": earliest_slot,
+        "date": date_label,
+        "time": time_label,
         "facilityName": primary_facility["name"],
         "requestId": ref_num,
+        "statusText": status_label,
     }
 
     # 8. Nearby Facilities Options Summary for Patient

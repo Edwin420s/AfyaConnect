@@ -1,5 +1,6 @@
 import React from 'react';
 import { FeedbackCardData } from '../../types';
+import { useApp } from '../../context/AppContext';
 
 interface FeedbackCardProps {
   data: FeedbackCardData;
@@ -12,6 +13,7 @@ export const FeedbackCard: React.FC<FeedbackCardProps> = ({
   onConfirm,
   onViewTimeline,
 }) => {
+  const { languagePreference } = useApp();
   const {
     type,
     department,
@@ -145,7 +147,13 @@ export const FeedbackCard: React.FC<FeedbackCardProps> = ({
           onClick={onViewTimeline}
           className="text-xs text-primary font-bold flex items-center gap-1 hover:underline pt-0.5"
         >
-          <span>Tazama Hatua za Miadi (View Timeline)</span>
+          <span>
+            {languagePreference === 'eng'
+              ? 'View Appointment Timeline'
+              : languagePreference === 'swa'
+              ? 'Tazama Hatua za Miadi'
+              : 'View Timeline (Tazama Hatua)'}
+          </span>
           <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
         </button>
       )}
