@@ -57,6 +57,8 @@ def get_hospital_dashboard(facilityId: Optional[str] = "f-agakhan", db: Session 
     completed_count = sum(1 for r in requests if r.status == RequestStatusEnum.COMPLETED)
     urgent_count = sum(1 for r in requests if str(r.urgency).upper() == "URGENT")
 
+    inbox_items = get_hospital_requests(db=db)
+
     return {
         "facilityName": "Nairobi Metropolis Health Network",
         "shift": "Morning (07:00–15:00)",
@@ -69,6 +71,7 @@ def get_hospital_dashboard(facilityId: Optional[str] = "f-agakhan", db: Session 
             "completed": completed_count,
             "urgent": urgent_count,
         },
+        "inbox": inbox_items,
         "systemStatus": {
             "claudeAiEngine": "Online (Triage Latency: 2.4s)",
             "hmisGateway": "Synced",
@@ -127,6 +130,7 @@ def get_hospital_requests(
 
         results.append({
             "id": r.referenceNumber,
+            "referenceNumber": r.referenceNumber,
             "internalId": r.id,
             "patientName": r.patient.user.name if r.patient and r.patient.user else "Jane M.",
             "patientPhone": r.patient.user.phone if r.patient and r.patient.user else "+254712345678",
@@ -158,6 +162,7 @@ def get_hospital_requests(
 
 
 @router.post("/requests/{request_id}/assign-doctor")
+@router.post("/care-requests/{request_id}/assign-doctor")
 def assign_doctor(request_id: str, req: AssignDoctorRequest, db: Session = Depends(get_db)):
     care_req = (
         db.query(CareRequest)
@@ -199,6 +204,7 @@ def assign_doctor(request_id: str, req: AssignDoctorRequest, db: Session = Depen
         "success": True,
         "requestId": care_req.referenceNumber,
         "doctorName": req.doctorName,
+        "assignedDoctorName": req.doctorName,
         "slotTime": req.slotTime,
         "status": care_req.status,
         "message": f"Doctor {req.doctorName} successfully assigned.",
@@ -206,6 +212,7 @@ def assign_doctor(request_id: str, req: AssignDoctorRequest, db: Session = Depen
 
 
 @router.post("/requests/{request_id}/confirm-slot")
+@router.post("/care-requests/{request_id}/confirm-slot")
 def confirm_slot_from_hospital(request_id: str, req: ConfirmSlotRequest, db: Session = Depends(get_db)):
     care_req = (
         db.query(CareRequest)

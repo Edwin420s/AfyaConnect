@@ -17,6 +17,21 @@ def check_availability(req: AvailabilityCheckRequest, db: Session = Depends(get_
     return AvailabilityResponse(**result)
 
 
+@router.get("/check", response_model=AvailabilityResponse)
+def check_availability_get(
+    facility_id: str = "f-agakhan",
+    department_code: str = "OPD",
+    preferred_day: str = "today",
+    db: Session = Depends(get_db),
+):
+    result = get_facility_doctor_availability(
+        db=db,
+        facility_id=facility_id,
+        department_code=department_code,
+    )
+    return AvailabilityResponse(**result)
+
+
 @router.post("/hold-slot", response_model=HoldSlotResponse)
 def hold_slot(req: HoldSlotRequest, db: Session = Depends(get_db)):
     res = validate_and_hold_slot(
