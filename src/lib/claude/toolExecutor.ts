@@ -16,6 +16,7 @@ export interface ToolExecutionContext {
   careRequests?: CareRequest[];
   patientName?: string;
   patientPhone?: string;
+  patientLocation?: string;
   userLocationText?: string;
   onCareRequestCreated?: (request: CareRequest) => void;
   onSlotHeld?: (facilityId: string, doctorName: string, slotTime: string) => void;
@@ -121,13 +122,14 @@ export async function executeAfyaConnectTool(
       const requestId = `#${Math.floor(10487 + Math.random() * 500)}`;
 
       const timeline: TimelineStep[] = [
-        { step: 1, title: '1. Ombi Limepokelewa', description: 'Triage intake logged from patient interaction', timestamp: timeNow, completed: true, active: true },
-        { step: 2, title: '2. Hospital Central Triage Synced', description: `${matchedFacility.name} HMIS queue synced`, timestamp: 'Pending', completed: false, active: false },
-        { step: 3, title: `3. Idara: ${chiefConcern}`, description: 'Auto-routed by clinical algorithm', timestamp: 'Pending', completed: false, active: false },
-        { step: 4, title: `4. Daktari: ${leadDoc}`, description: 'Doctor schedule locked', timestamp: 'Pending', completed: false, active: false },
-        { step: 5, title: `5. Saa: ${preferredSlot}`, description: 'Slot held for patient', timestamp: 'Pending', completed: false, active: false },
-        { step: 6, title: '6. Uthibitisho wa Mgonjwa', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
-        { step: 7, title: '7. MIADI IMETHIBITISHWA NA KUFUNGWA', description: 'Booking pass generation', timestamp: 'Pending', completed: false, active: false },
+        { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation', timestamp: timeNow, completed: true, active: false },
+        { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: timeNow, completed: true, active: true },
+        { step: 3, title: 'Hospital received request', description: `${matchedFacility.name} HMIS queue synced`, timestamp: 'Pending', completed: false, active: false },
+        { step: 4, title: 'Department identified', description: `Auto-routed to ${chiefConcern}`, timestamp: 'Pending', completed: false, active: false },
+        { step: 5, title: 'Doctor availability checked', description: `${leadDoc} calendar verified`, timestamp: 'Pending', completed: false, active: false },
+        { step: 6, title: 'Time proposed', description: `Slot proposed: ${preferredSlot}`, timestamp: 'Pending', completed: false, active: false },
+        { step: 7, title: 'Patient confirmed', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
+        { step: 8, title: 'APPOINTMENT BOOKED', description: 'Digital token pass generation', timestamp: 'Pending', completed: false, active: false },
       ];
 
       const newCareRequest: CareRequest = {

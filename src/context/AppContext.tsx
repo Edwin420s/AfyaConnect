@@ -3,6 +3,15 @@ import { UserRole, Language, CareRequest, Facility, ChatMessage, TimelineStep } 
 import { INITIAL_FACILITIES, INITIAL_CARE_REQUESTS, INITIAL_CHAT_MESSAGES } from '../data/mockData';
 import { orchestratePatientInteractionAsync } from '../lib/claude/orchestrator';
 import { dispatchAppointmentConfirmedNotification } from '../lib/services/notificationService';
+import {
+  sendInteractMessage,
+  bookAppointmentOnBackend,
+  rescheduleAppointmentOnBackend,
+  cancelAppointmentOnBackend,
+  assignDoctorOnBackend,
+  confirmSlotOnBackend,
+  fetchBackendFacilities,
+} from '../lib/api/client';
 
 interface AppContextType {
   // Role & Navigation
@@ -129,7 +138,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const activeRequest = careRequests.find(r => r.id === activeRequestId) || careRequests[0];
 
-  // Send message in patient chat using Claude Agent Orchestrator
+  // Send message in patient chat using Backend API with Claude Agent Orchestrator fallback
   const sendMessage = async (text: string, isAudioSnippet: boolean = false) => {
     const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const newPatientMsg: ChatMessage = {
@@ -147,30 +156,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAiThinking(true);
 
     try {
-      const result = await orchestratePatientInteractionAsync(
-        text,
+      // 1. Attempt Backend API First
+      const backendRes = await sendInteractMessage({
+        message: text,
         isAudioSnippet,
         languagePreference,
-        {
-          patientName: 'Jane M.',
-          patientPhone: '+254 712 345 678',
-          patientLocation: userLocationText,
-        },
-        updatedHistory
-      );
+        patientName: 'Jane M.',
+        patientPhone: '+254 712 345 678',
+      });
 
-      if (result.isEmergencyAlert) {
-        setIsEmergencyModalOpen(true);
-      }
+      if (backendRes) {
+        if (backendRes.isEmergency) {
+          setIsEmergencyModalOpen(true);
+        }
 
-      setChatMessages(prev => [...prev, result.message]);
+        const primaryFac = backendRes.nearbyFacilities?.[0];
+        const assistantMsg: ChatMessage = {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'assistant',
+          text: backendRes.responseMessage,
+          timestamp: timeNow,
+          triageLevel: `Triage Level ${backendRes.triageScore}`,
+          dialectTag: backendRes.dialectTag,
+          feedbackCard: backendRes.feedbackCard,
+          recommendedHospital: primaryFac
+            ? {
+                name: primaryFac.name,
+                subCounty: primaryFac.subCounty,
+                distance: `${primaryFac.distanceKm} km away`,
+                doctorName: primaryFac.leadDoctor,
+                doctorSpecialty: 'General Consultation',
+                todaySlot: primaryFac.earliestSlot,
+                waitTime: '~15 mins wait',
+                coverage: 'SHA / NHIF Verified',
+                facilityId: primaryFac.id,
+              }
+            : undefined,
+          options: primaryFac
+            ? [
+                `Confirm Slot: ${primaryFac.leadDoctor} • ${primaryFac.earliestSlot}`,
+                '📍 Ona Vituo / Other Options',
+                '🩺 Nahitaji daktari leo',
+              ]
+            : undefined,
+        };
 
-      if (result.createdCareRequest) {
-        setCareRequests(prev => [result.createdCareRequest!, ...prev]);
-        setActiveRequestId(result.createdCareRequest.id);
+        setChatMessages(prev => [...prev, assistantMsg]);
+
+        if (backendRes.careRequest) {
+          setCareRequests(prev => [backendRes.careRequest, ...prev]);
+          setActiveRequestId(backendRes.careRequest.id);
+        }
+      } else {
+        // 2. Resilient Client-Side Orchestrator Fallback
+        const result = await orchestratePatientInteractionAsync(
+          text,
+          isAudioSnippet,
+          languagePreference,
+          {
+            patientName: 'Jane M.',
+            patientPhone: '+254 712 345 678',
+            patientLocation: userLocationText,
+          },
+          updatedHistory
+        );
+
+        if (result.isEmergencyAlert) {
+          setIsEmergencyModalOpen(true);
+        }
+
+        setChatMessages(prev => [...prev, result.message]);
+
+        if (result.createdCareRequest) {
+          setCareRequests(prev => [result.createdCareRequest!, ...prev]);
+          setActiveRequestId(result.createdCareRequest.id);
+        }
       }
     } catch (err: any) {
-      console.error('Claude Agent Orchestration error:', err);
+      console.error('Patient interaction error:', err);
       showToast('Hitilafu ya AI. Jaribu tena.');
     } finally {
       setIsAiThinking(false);
@@ -188,7 +251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsBookingSheetOpen(true);
   };
 
-  // Confirm booking from sheet or feedback card
+  // Confirm booking from sheet or feedback card (8-step synchronized timeline)
   const confirmBooking = (phone: string) => {
     const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const token = `#AC-NBO-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -197,13 +260,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(req => {
         if (req.id === activeRequestId || req.id === '#10482') {
           const updatedTimeline: TimelineStep[] = [
-            { step: 1, title: '1. Ombi Limepokelewa', description: 'Triage intake initiated from app', timestamp: '09:15 AM', completed: true, active: false },
-            { step: 2, title: '2. Hospital Central Triage Synced', description: 'HMIS Gateway handshake validated', timestamp: '09:16 AM', completed: true, active: false },
-            { step: 3, title: '3. Idara: General Medicine', description: 'Auto-routed by clinical algorithm', timestamp: '09:18 AM', completed: true, active: false },
-            { step: 4, title: '4. Daktari Amethibitishwa', description: `${pendingBooking.doctor} calendar confirmed`, timestamp: '09:22 AM', completed: true, active: false },
-            { step: 5, title: '5. Saa Imependekezwa: ' + pendingBooking.slot, description: 'Consultation slot confirmed', timestamp: '09:23 AM', completed: true, active: false },
-            { step: 6, title: '6. Uthibitisho wa Mgonjwa', description: `Approved via Phone +254 ${phone}`, timestamp: timeNow, completed: true, active: false },
-            { step: 7, title: '7. MIADI IMETHIBITISHWA NA KUFUNGWA', description: `Ready for admission at ${pendingBooking.hospital}`, timestamp: timeNow, completed: true, active: true },
+            { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: '09:14 AM', completed: true, active: false },
+            { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: '09:15 AM', completed: true, active: false },
+            { step: 3, title: 'Hospital received request', description: `${pendingBooking.hospital} intake and triage queue synced`, timestamp: '09:16 AM', completed: true, active: false },
+            { step: 4, title: 'Department identified', description: 'General Consultation (OPD)', timestamp: '09:18 AM', completed: true, active: false },
+            { step: 5, title: 'Doctor availability checked', description: `${pendingBooking.doctor} calendar confirmed`, timestamp: '09:22 AM', completed: true, active: false },
+            { step: 6, title: 'Time proposed', description: `Consultation slot: ${pendingBooking.slot}`, timestamp: '09:23 AM', completed: true, active: false },
+            { step: 7, title: 'Patient confirmed', description: `Approved via Phone +254 ${phone}`, timestamp: timeNow, completed: true, active: false },
+            { step: 8, title: 'APPOINTMENT BOOKED', description: `Booking confirmed • Token ${token} issued`, timestamp: timeNow, completed: true, active: true },
           ];
 
           return {
@@ -222,7 +286,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    // Send SMS & WhatsApp Notification
+    // Send Multi-channel SMS & WhatsApp Notification
     dispatchAppointmentConfirmedNotification(
       `+254 ${phone}`,
       pendingBooking.doctor,
@@ -230,6 +294,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       pendingBooking.slot,
       token
     );
+
+    // Sync booking with FastAPI backend database
+    bookAppointmentOnBackend({
+      careRequestId: activeRequestId,
+      patientPhone: `+254 ${phone}`,
+      facilityName: pendingBooking.hospital,
+      doctorName: pendingBooking.doctor,
+      slotTime: pendingBooking.slot,
+      facilityId: pendingBooking.facilityId,
+    }).catch(err => console.warn('Background backend booking sync error:', err));
 
     // Add confirmation feedback card directly to conversation
     const confirmationMsg: ChatMessage = {
@@ -262,8 +336,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(r => {
         if (r.id === requestId) {
           const updatedTimeline = r.timeline.map(t => {
-            if (t.step === 4) return { ...t, completed: true, active: false, description: `${doctorName} assigned` };
-            if (t.step === 5) return { ...t, completed: true, active: true, title: `5. Saa Imependekezwa: ${slotTime}`, description: 'Slot held for patient' };
+            if (t.step === 5) return { ...t, completed: true, active: false, description: `${doctorName} verified` };
+            if (t.step === 6) return { ...t, completed: true, active: true, title: 'Time proposed', description: `Time proposed: ${slotTime}` };
             return t;
           });
           return {
@@ -278,6 +352,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return r;
       })
     );
+
+    // Sync with backend
+    assignDoctorOnBackend(requestId, 'doc-kamau-1', doctorName, slotTime).catch(err =>
+      console.warn('Background assign doctor error:', err)
+    );
+
     showToast(`Hospital: ${doctorName} amepewa ombi ${requestId} (${slotTime})`);
   };
 
@@ -290,8 +370,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(r => {
         if (r.id === requestId) {
           const updatedTimeline = r.timeline.map(t => {
-            if (t.step <= 6) return { ...t, completed: true, active: false };
-            if (t.step === 7) return { ...t, completed: true, active: true, timestamp: timeNow };
+            if (t.step <= 7) return { ...t, completed: true, active: false };
+            if (t.step === 8) return { ...t, completed: true, active: true, timestamp: timeNow, description: `Booking confirmed • Token ${token} issued` };
             return t;
           });
 
@@ -308,6 +388,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return r;
       })
     );
+
+    // Sync with backend
+    confirmSlotOnBackend(requestId, doctorName, slotTime).catch(err =>
+      console.warn('Background confirm slot error:', err)
+    );
+
     showToast(`✓ Dispatched to SHA & SMS! Slot confirmed for ${doctorName} at ${slotTime}`);
   };
 
@@ -317,13 +403,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(r => {
         if (r.id === requestId) {
           const updatedTimeline = r.timeline.map(t => {
-            if (t.step === 3) {
+            if (t.step === 4) {
               return {
                 ...t,
                 completed: true,
                 active: true,
-                title: `3. Idara: ${department}`,
-                description: 'Updated by hospital triage lead',
+                title: 'Department identified',
+                description: `Department identified: ${department}`,
               };
             }
             return t;
@@ -356,6 +442,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return r;
       })
     );
+
+    rescheduleAppointmentOnBackend(activeRequestId, newSlot).catch(err =>
+      console.warn('Background reschedule error:', err)
+    );
+
     showToast(`Ombi la kubadilisha saa limepokelewa: ${newSlot}`);
   };
 
@@ -373,6 +464,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return r;
       })
     );
+
+    cancelAppointmentOnBackend(activeRequestId).catch(err =>
+      console.warn('Background cancel error:', err)
+    );
+
     showToast(`Miadi imeghairiwa. Hospitali imejulishwa.`);
   };
 

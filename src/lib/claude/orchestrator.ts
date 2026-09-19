@@ -135,7 +135,9 @@ export async function orchestratePatientInteractionAsync(
     patientAge: 32,
     patientPhone: context.patientPhone || '+254 712 345 678',
     patientLocation: context.patientLocation || 'Westlands (2.1 km away)',
-    languageMode: loopResult.dialectTag,
+    languageMode: (loopResult.dialectTag === 'ENGLISH' || loopResult.dialectTag === 'KISWAHILI'
+      ? loopResult.dialectTag
+      : 'SWA + ENG CODE-SWITCH') as 'SWA + ENG CODE-SWITCH' | 'ENGLISH' | 'KISWAHILI',
     verbatimTranscript: `“${patientMessage}”`,
     audioDurationSeconds: isAudioSnippet ? 24 : undefined,
     chiefConcern: patientMessage.length > 35 ? patientMessage.slice(0, 35) + '...' : patientMessage,
@@ -157,13 +159,14 @@ export async function orchestratePatientInteractionAsync(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     timeline: [
-      { step: 1, title: '1. Ombi Limepokelewa', description: 'Triage intake initiated from chat/voice', timestamp: timeNow, completed: true, active: true },
-      { step: 2, title: '2. Hospital Central Triage Synced', description: 'HMIS Gateway handshake validated', timestamp: 'Pending', completed: false, active: false },
-      { step: 3, title: `3. Idara: ${pathway.department}`, description: 'Auto-routed by clinical algorithm', timestamp: 'Pending', completed: false, active: false },
-      { step: 4, title: `4. Daktari: ${leadDoctor}`, description: 'Doctor schedule locked', timestamp: 'Pending', completed: false, active: false },
-      { step: 5, title: `5. Saa: ${earliestSlot}`, description: 'Slot held for patient', timestamp: 'Pending', completed: false, active: false },
-      { step: 6, title: '6. Uthibitisho wa Mgonjwa', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
-      { step: 7, title: '7. MIADI IMETHIBITISHWA NA KUFUNGWA', description: 'Booking pass generation', timestamp: 'Pending', completed: false, active: false },
+      { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: timeNow, completed: true, active: false },
+      { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: timeNow, completed: true, active: true },
+      { step: 3, title: 'Hospital received request', description: `${primaryFacility.name} triage queue synced`, timestamp: 'Pending', completed: false, active: false },
+      { step: 4, title: 'Department identified', description: `Auto-routed to ${pathway.department}`, timestamp: 'Pending', completed: false, active: false },
+      { step: 5, title: 'Doctor availability checked', description: `${leadDoctor} calendar verified`, timestamp: 'Pending', completed: false, active: false },
+      { step: 6, title: 'Time proposed', description: `Proposed slot: ${earliestSlot}`, timestamp: 'Pending', completed: false, active: false },
+      { step: 7, title: 'Patient confirmed', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
+      { step: 8, title: 'APPOINTMENT BOOKED', description: 'Digital token pass generation', timestamp: 'Pending', completed: false, active: false },
     ],
   };
 
@@ -315,13 +318,14 @@ export function orchestratePatientInteraction(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     timeline: [
-      { step: 1, title: '1. Ombi Limepokelewa', description: 'Triage intake initiated from chat/voice', timestamp: timeNow, completed: true, active: true },
-      { step: 2, title: '2. Hospital Central Triage Synced', description: 'HMIS Gateway handshake validated', timestamp: 'Pending', completed: false, active: false },
-      { step: 3, title: `3. Idara: ${pathway.department}`, description: 'Auto-routed by clinical algorithm', timestamp: 'Pending', completed: false, active: false },
-      { step: 4, title: `4. Daktari: ${leadDoctor}`, description: 'Doctor schedule locked', timestamp: 'Pending', completed: false, active: false },
-      { step: 5, title: `5. Saa: ${earliestSlot}`, description: 'Slot held for patient', timestamp: 'Pending', completed: false, active: false },
-      { step: 6, title: '6. Uthibitisho wa Mgonjwa', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
-      { step: 7, title: '7. MIADI IMETHIBITISHWA NA KUFUNGWA', description: 'Booking pass generation', timestamp: 'Pending', completed: false, active: false },
+      { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: timeNow, completed: true, active: false },
+      { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: timeNow, completed: true, active: true },
+      { step: 3, title: 'Hospital received request', description: `${primaryFacility.name} triage queue synced`, timestamp: 'Pending', completed: false, active: false },
+      { step: 4, title: 'Department identified', description: `Auto-routed to ${pathway.department}`, timestamp: 'Pending', completed: false, active: false },
+      { step: 5, title: 'Doctor availability checked', description: `${leadDoctor} calendar verified`, timestamp: 'Pending', completed: false, active: false },
+      { step: 6, title: 'Time proposed', description: `Proposed slot: ${earliestSlot}`, timestamp: 'Pending', completed: false, active: false },
+      { step: 7, title: 'Patient confirmed', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
+      { step: 8, title: 'APPOINTMENT BOOKED', description: 'Digital token pass generation', timestamp: 'Pending', completed: false, active: false },
     ],
   };
 
