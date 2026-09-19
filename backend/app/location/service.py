@@ -73,11 +73,13 @@ def find_nearby_facilities(
 
         # Check department if requested
         if department and department != "All":
+            dept_terms = [t.strip().lower() for t in department.replace("&", ",").replace("/", ",").replace("(", ",").replace(")", "").split(",") if t.strip()]
             has_dept = any(
-                department.lower() in d.name.lower() or department.lower() in d.code.lower()
+                any(t in d.name.lower() or t in d.code.lower() for t in dept_terms)
+                or "general" in d.name.lower() or "opd" in d.code.lower()
                 for d in fac.departments
             )
-            if not has_dept and "general" not in department.lower():
+            if not has_dept:
                 continue
 
         # Get doctors & earliest slot
@@ -107,4 +109,8 @@ def find_nearby_facilities(
 
     # Sort by distance
     results.sort(key=lambda x: x["distanceKm"])
+
+    if not results and department and department != "All":
+        return find_nearby_facilities(db, lat=lat, lon=lon, radius_km=radius_km, department="All", insurance=insurance)
+
     return results
