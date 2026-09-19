@@ -1,0 +1,353 @@
+// AfyaConnect Full Database Schema
+// PostgreSQL / Prisma ORM Data Model
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  HOSPITAL_STAFF
+  DOCTOR
+  HOSPITAL_ADMIN
+  SYSTEM_ADMIN
+}
+
+enum RequestStatus {
+  RECEIVED
+  HOSPITAL_REVIEW
+  DEPARTMENT_ASSIGNED
+  CHECKING_AVAILABILITY
+  SLOT_PROPOSED
+  PATIENT_ACCEPTED
+  CONFIRMED
+  RESCHEDULING
+  CANCELLED
+  COMPLETED
+}
+
+enum Urgency {
+  ROUTINE
+  STANDARD
+  URGENT
+  EMERGENCY
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  RESCHEDULED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum NotificationChannel {
+  IN_APP
+  SMS
+  WHATSAPP
+  USSD
+  VOICE
+}
+
+model User {
+  id                String         @id @default(cuid())
+  phone             String         @unique
+  email             String?        @unique
+  name              String
+  role              Role           @default(PATIENT)
+  preferredLanguage String         @default("swa_eng") // "swa_eng", "swa", "eng"
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  patient           Patient?
+  staff             HospitalStaff?
+  doctor            Doctor?
+}
+
+model Patient {
+  id                String            @id @default(cuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth       DateTime?
+  nationalId        String?
+  insuranceProvider String?           @default("SHA") // Social Health Authority
+  insuranceNumber   String?
+  
+  conversations     Conversation[]
+  careRequests      CareRequest[]
+  appointments      Appointment[]
+  notifications     Notification[]
+  locationRecords   LocationRecord[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model Facility {
+  id                String            @id @default(cuid())
+  name              String
+  level             String            // e.g. "Level 6 Referral", "Level 5 Hospital", "Level 4 Public Centre"
+  accreditation     String            // e.g. "SHA Verified", "Linda Mama Free"
+  address           String
+  subCounty         String
+  city              String            @default("Nairobi")
+  latitude          Float
+  longitude         Float
+  phone             String
+  email             String?
+  imageUrl          String?
+  mapImageUrl       String?
+  isEmergencyReady  Boolean           @default(true)
+  isPublic          Boolean           @default(false)
+  acceptsInsurance  String[]          @default(["SHA", "NHIF", "Britam", "Jubilee", "Cash", "M-PESA"])
+  
+  departments       Department[]
+  services          FacilityService[]
+  doctors           Doctor[]
+  staff             HospitalStaff[]
+  appointments      Appointment[]
+  careRequests      CareRequest[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model Department {
+  id                String            @id @default(cuid())
+  facilityId        String
+  facility          Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  name              String            // e.g. "General Medicine", "Pediatrics", "ENT", "Dermatology"
+  code              String            // e.g. "OPD", "PED", "ENT", "DERM"
+  description       String?
+  
+  doctors           DoctorDepartment[]
+  careRequests      CareRequest[]
+  createdAt         DateTime          @default(now())
+
+  @@unique([facilityId, code])
+}
+
+model Doctor {
+  id                  String               @id @default(cuid())
+  userId              String?              @unique
+  user                User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  facilityId          String
+  facility            Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  fullName            String
+  initials            String
+  specialty           String
+  qualification       String               @default("MBChB")
+  yearsExperience     Int                  @default(5)
+  roomNumber          String               @default("Room 04")
+  consultationMinutes Int                  @default(30)
+  isOnDuty            Boolean              @default(true)
+  
+  departments         DoctorDepartment[]
+  availability        DoctorAvailability[]
+  exceptions          AvailabilityException[]
+  appointments        Appointment[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model DoctorDepartment {
+  doctorId          String
+  departmentId      String
+  doctor            Doctor             @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  department        Department         @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([doctorId, departmentId])
+}
+
+model DoctorAvailability {
+  id                String             @id @default(cuid())
+  doctorId          String
+  doctor            Doctor             @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  weekday           Int                // 0=Sun, 1=Mon, ..., 6=Sat
+  startMinute       Int                // minutes from midnight e.g. 540 = 09:00
+  endMinute         Int                // e.g. 1020 = 17:00
+  slotDurationMins  Int                @default(30)
+  maxPatients       Int                @default(16)
+
+  @@index([doctorId, weekday])
+}
+
+model AvailabilityException {
+  id                String             @id @default(cuid())
+  doctorId          String
+  doctor            Doctor             @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  date              DateTime
+  startMinute       Int?
+  endMinute         Int?
+  reason            String?
+  isFullDayLeave    Boolean            @default(true)
+
+  @@index([doctorId, date])
+}
+
+model FacilityService {
+  id                String             @id @default(cuid())
+  facilityId        String
+  facility          Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  departmentCode    String?
+  feeAmountKsh      Float?
+  isCoveredBySha    Boolean            @default(true)
+
+  @@unique([facilityId, code])
+}
+
+model HospitalStaff {
+  id                String             @id @default(cuid())
+  userId            String             @unique
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facilityId        String
+  facility          Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  position          String             @default("Triage Receptionist")
+  shift             String             @default("Morning (07:00–15:00)")
+  createdAt         DateTime           @default(now())
+}
+
+model Conversation {
+  id                String                 @id @default(cuid())
+  patientId         String
+  patient           Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  languageMode      String                 @default("swa_eng")
+  channel           String                 @default("app_chat") // app_chat | voice_call | sms | ussd
+  messages          ConversationMessage[]
+  careRequests      CareRequest[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+}
+
+model ConversationMessage {
+  id                String                 @id @default(cuid())
+  conversationId    String
+  conversation      Conversation           @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderRole        String                 // "patient" | "assistant" | "system" | "tool"
+  content           String                 @db.Text
+  isAudioSnippet    Boolean                @default(false)
+  audioDuration     String?
+  dialectTag        String?                // "SHG / SWA", "ENG", "SWA"
+  triageLevel       String?
+  toolCallName      String?
+  toolCallPayload   Json?
+  createdAt         DateTime               @default(now())
+}
+
+model CareRequest {
+  id                  String               @id @default(cuid())
+  referenceNumber     String               @unique // e.g. "#10482"
+  patientId           String
+  patient             Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  conversationId      String?
+  conversation        Conversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  facilityId          String?
+  facility            Facility?            @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+  departmentId        String?
+  department          Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  assignedDoctorId    String?
+  assignedDoctorName  String?
+  assignedSlot        String?
+  
+  verbatimTranscript  String               @db.Text
+  chiefConcern        String
+  symptomDuration     String
+  secondarySymptoms   String[]
+  triageScore         Int                  @default(2) // 1 to 5
+  urgency             Urgency              @default(STANDARD)
+  clinicalSummary     String               @db.Text
+  flags               String[]
+  preferredTime       String?
+  preferredDate       String?
+  status              RequestStatus        @default(RECEIVED)
+  tokenPass           String?
+  
+  events              CareRequestEvent[]
+  appointment         Appointment?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model CareRequestEvent {
+  id                  String               @id @default(cuid())
+  careRequestId       String
+  careRequest         CareRequest          @relation(fields: [careRequestId], references: [id], onDelete: Cascade)
+  stepNumber          Int
+  title               String
+  description         String
+  actor               String?
+  timestampText       String
+  isCompleted         Boolean              @default(false)
+  isActive            Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+
+  @@index([careRequestId, stepNumber])
+}
+
+model Appointment {
+  id                  String               @id @default(cuid())
+  careRequestId       String?              @unique
+  careRequest         CareRequest?         @relation(fields: [careRequestId], references: [id], onDelete: SetNull)
+  patientId           String
+  patient             Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  facilityId          String
+  facility            Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  doctorId            String
+  doctor              Doctor               @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  
+  startsAt            DateTime
+  endsAt              DateTime
+  slotLabel           String               // e.g. "Leo 3:30 PM", "Kesho 10:30 AM"
+  status              AppointmentStatus    @default(PENDING)
+  tokenPass           String               @unique // e.g. "#AC-NBO-8492"
+  notes               String?
+  isCheckInScanned    Boolean              @default(false)
+  scannedAt           DateTime?
+  
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([doctorId, startsAt])
+}
+
+model Notification {
+  id                  String               @id @default(cuid())
+  patientId           String
+  patient             Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  channel             NotificationChannel  @default(SMS)
+  title               String
+  message             String
+  isSent              Boolean              @default(true)
+  sentAt              DateTime             @default(now())
+  readAt              DateTime?
+}
+
+model LocationRecord {
+  id                  String               @id @default(cuid())
+  patientId           String
+  patient             Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  latitude            Float
+  longitude           Float
+  accuracyMeters      Float?
+  resolvedArea        String               // e.g. "Westlands & Parklands, Nairobi"
+  createdAt           DateTime             @default(now())
+}
+
+model AuditLog {
+  id                  String               @id @default(cuid())
+  timestamp           DateTime             @default(now())
+  action              String               // "REQUEST_CREATED", "SLOT_PROPOSED", "APPOINTMENT_CONFIRMED"
+  actorId             String?
+  actorRole           String?
+  actorName           String?
+  targetEntity        String               // "CareRequest", "Appointment", "DoctorSchedule"
+  targetId            String?
+  details             String
+  ipAddress           String?
+}
