@@ -1,178 +1,142 @@
-# AfyaConnect 🏥🇰🇪
-### AI-Powered Healthcare Triage & Care Navigation Platform
+# AfyaConnect (Afya ya Jamii) 🇰🇪
+### Bilingual Conversational Healthcare Access & Two-Sided Hospital Coordination Platform
 
-AfyaConnect is an intelligent, multilingual healthcare triage and care navigation platform designed for Kenya's healthcare ecosystem. It connects patients with accredited facilities, matches them with on-duty doctors in real-time, and navigates public and private healthcare options under the Social Health Authority (SHA), Linda Mama, and NHIF frameworks.
+AfyaConnect is an intelligent, location-aware, two-sided healthcare platform designed for urban and peri-urban Kenya (Nairobi Metropolis). It connects patients seeking care with hospital operations in real time.
 
----
-
-## 🌟 Key Features
-
-### 1. Multilingual AI Care Frontdoor
-- **Conversational Triage in Swahili, English, and Sheng**: Seamlessly understands patient symptoms in local dialects (e.g., *"Niko na homa na kichwa kinaniuma sana"* or *"Msee naskia chest pain"*).
-- **Audio & Text Support**: Voice recording simulation with real-time waveform visualization and clinical transcript extraction.
-- **Urgency Scoring (Levels 1–5)**: Categorizes requests into Routine, Standard, Urgent, or Emergency with clinical summaries and chief concern identification.
-
-### 2. Clinical Safety Guardrails & Emergency Hotline Routing
-- **Red-Flag Symptom Interception**: Automatically detects life-threatening indicators (severe chest pain, breathing difficulty, acute trauma, sudden numbness, uncontrolled bleeding).
-- **Emergency Modal & Dispatch**: Instant one-tap access to Kenyan emergency dispatch numbers (999, 112, 911), ambulance coordination, and nearest Level 6 trauma centers.
-
-### 3. Real-Time Doctor Availability & Slot Matching Engine
-- **Live Scheduling & Conflict Detection**: Dynamically tracks doctor duty status, consultation room numbers, and available 30-minute booking slots.
-- **Smart Departmental Routing**: Maps symptoms directly to specialties (e.g., Pediatrics, Internal Medicine, ENT, Cardiology, Obstetrics).
-
-### 4. Kenyan Healthcare Ecosystem Integration
-- **Insurance & Payment Verification**: Badges and filters for **SHA (Social Health Authority)**, **Linda Mama (Maternal Care)**, **NHIF**, private insurers (Britam, Jubilee), and **M-PESA** payment rails.
-- **Facility Classification**: Support for Level 4 Sub-County Hospitals, Level 5 County Referral Facilities, and Level 6 National Referral Centers (e.g., Kenyatta National Hospital, MP Shah, Nairobi West).
-
-### 5. Unified Multi-Role Portals
-- **Patient Portal**: Conversational triage, nearby facility search with Haversine distance, active booking pass with token (#AC-NBO-XXXX), and care feedback.
-- **Hospital Intake Portal**: Triage queue management, department capacity monitoring, patient intake review, and slot confirmations.
-- **Doctor Schedule Portal**: Daily clinical roster, consultation notes, patient histories, and mark-as-completed workflows.
-- **System Administrator Portal**: Real-time SLA monitoring, emergency dispatch audits, language usage metrics, and AI triage quality telemetry.
-
-### 6. Multi-Channel Notification Architecture
-- Simulated dispatches across **SMS**, **WhatsApp Business API**, **USSD**, and **In-App push notifications** for appointment reminders and digital passes.
+Patients can call or chat in **English**, **Kiswahili**, or a natural **Sheng code-switch**, explain their symptoms, receive instant clinical guidance without diagnosing, discover nearby participating healthcare facilities, and book appointments. Meanwhile, hospital receptionists, triage officers, and doctors manage requests, duty rosters, and digital passes in a centralized dashboard.
 
 ---
 
-## 🏗️ System Architecture
+## 🏛 System Architecture
 
-```
-                                  +---------------------------------------+
-                                  |            AfyaConnect UI             |
-                                  |     (React 19 + TypeScript + Vite)    |
-                                  +---------------------------------------+
-                                                     |
-             +----------------------+----------------+----------------------+
-             |                      |                                       |
-+--------------------------+  +--------------------------+  +-------------------------------+
-|     Patient Portal       |  |    Hospital & Doctor     |  |       Admin Analytics         |
-|  - Conversational AI     |  |  - Intake Queue Review   |  |  - System SLA & Dispatch      |
-|  - Facility Locator      |  |  - Doctor Slot Roster    |  |  - Triage Quality Audits      |
-|  - Digital Token Pass    |  |  - Room Assignment       |  |  - Multi-Channel Telemetry    |
-+--------------------------+  +--------------------------+  +-------------------------------+
-             |                                                              |
-             +------------------------------+-------------------------------+
-                                            |
-                                            v
-+-------------------------------------------------------------------------------------------+
-|                                    Core Application Context                                |
-|                   (Role State, Language Preferences, Care Request Pipeline)               |
-+-------------------------------------------------------------------------------------------+
-         |                                  |                                   |
-         v                                  v                                   v
-+------------------+              +-------------------+               +--------------------+
-|  Location Engine |              | Availability Roster|               | Notification Hub   |
-| (Haversine/Areas)|              | (Real-time Slots) |               | (SMS/WhatsApp/USSD)|
-+------------------+              +-------------------+               +--------------------+
-         \                                  |                                  /
-          \                                 |                                 /
-           v                                v                                v
-+-------------------------------------------------------------------------------------------+
-|                                Claude AI Orchestration Layer                              |
-|   - Multilingual Clinical Prompts (SWA / ENG / SHG)                                       |
-|   - Red-Flag Safety Engine & Emergency Interception                                       |
-|   - Function Calling Tools (triageCareRequest, findSlots, bookAppointment)                |
-+-------------------------------------------------------------------------------------------+
-                                            |
-                                            v
-+-------------------------------------------------------------------------------------------+
-|                               Prisma Relational Data Model                                |
-|        (PostgreSQL: Patients, Facilities, Doctors, Slots, CareRequests, AuditLogs)        |
-+-------------------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph Patient ["🧑 Patient Experience"]
+        P1["🎙 Voice / 💬 Chat Intake (Sheng / Kiswahili / English)"]
+        P2["📍 Auto-Location (GPS Stripped for Privacy)"]
+        P3["📋 3 Feedback Cards: Request Received, Doctor Availability, Confirmed ✓"]
+        P4["⏱ Synchronized 8-Step Timeline (#AC-NBO-XXXX)"]
+        P1 --> P2 --> P3 --> P4
+    end
+
+    subgraph Intelligence ["🤖 Claude 3.7 / 3.5 Multi-Turn Tool Calling"]
+        C1["AFYACONNECT_SYSTEM_PROMPT & Clinical Boundaries"]
+        C2["Emergency Safety Layer (1199 Red Cross / 999 Police)"]
+        C3["Clinical Tools: check_availability, assign_slot, confirm_pass"]
+        C1 --> C2 --> C3
+    end
+
+    subgraph Hospital ["🏥 Hospital Operations & Coordination"]
+        H1["📥 Central Request Inbox (#10482 Jane, #10483 Peter, etc.)"]
+        H2["📊 Live Metrics (Total Requests, Awaiting Review, etc.)"]
+        H3["🩺 Doctor Roster (Single Source of Truth - Anti-Hallucination)"]
+        H4["✅ Propose & Confirm Slots, Dispatch SMS/WhatsApp Passes"]
+        H1 --> H2 --> H3 --> H4
+    end
+
+    Patient <--> Intelligence
+    Intelligence <--> Hospital
 ```
 
 ---
 
-## 🗄️ Database Schema (Prisma)
+## 🌟 Core Features
 
-The project includes an enterprise-grade Prisma schema (`prisma/schema.prisma`) modeling:
-- `User` & `Patient`: Demographic profiles, language preference, national ID, SHA insurance numbers.
-- `Facility` & `Department`: Healthcare facilities (Level 4–6), GPS coordinates, accreditation badges, and departmental units.
-- `Doctor` & `DoctorAvailability`: Medical qualifications, consultation rooms, recurring shift availability, and exception overrides.
-- `CareRequest` & `CareRequestEvent`: Audit trail of triage requests, verbatim transcripts, urgency classifications, and lifecycle events.
-- `Appointment`: Confirmed time slots, check-in tokens, and consultation tracking.
-- `AuditLog` & `Notification`: System-wide auditability and multi-channel notification logs.
+### 1. Patient Experience ("What happened to my request?")
+- **Bilingual & Sheng Code-Switching**: Speaks natural conversational Kenyan dialects (e.g., *"Nimekuwa na maumivu ya tumbo for two days, na nahisi homa kali tangu jana"*).
+- **Zero-Friction Auto-Location**: Resolves device coordinates into administrative sub-counties (e.g. *Westlands & Parklands Sub-County*) without asking *"Where are you located?"*.
+- **Location Privacy**: Raw GPS coordinates are stripped before the LLM prompt to protect patient privacy.
+- **Three Progressive Feedback Cards**:
+  1. **Appointment Request Received**: Shows department, requested time, and status.
+  2. **Doctor Availability**: Interactive card with verified doctor, room, time, and a one-click `[Confirm Appointment]` button.
+  3. **Appointment Confirmed ✓**: Issues cryptographic digital token pass (`#AC-NBO-XXXX`), facility directions, and preparation notes.
+- **Synchronized 8-Step Timeline**:
+  1. `CALL / CHAT MADE`
+  2. `Request received`
+  3. `Hospital received request`
+  4. `Department identified`
+  5. `Doctor availability checked`
+  6. `Time proposed`
+  7. `Patient confirmed`
+  8. `APPOINTMENT BOOKED`
+
+### 2. Hospital Operations ("Who is requesting care and what needs to be handled?")
+- **Central Request Inbox**: Every call or chat becomes a structured case (`CALL #10482` ➔ `PATIENT REQUEST` ➔ `HOSPITAL QUEUE` ➔ `DEPARTMENT` ➔ `DOCTOR` ➔ `APPOINTMENT`).
+- **Real-Time Acuity Metrics**: Total Requests, Awaiting Review, Checking Availability, Confirmed, Rescheduling, Completed, and Urgent.
+- **Doctor Roster as Single Source of Truth**: Claude never invents doctors or slots; all proposals originate from the hospital database.
+- **Case Review Modal**: Staff can review verbatim audio transcripts, language preference, insurance coverage (SHA Active), assign doctors, propose slots, and dispatch SMS/WhatsApp digital passes.
+
+### 3. Emergency Safety Layer
+- Short-circuits life-threatening symptoms (cardiac arrest, respiratory distress, acute trauma) directly to Kenyan emergency hotlines:
+  - **1199**: Kenya Red Cross Ambulance
+  - **999 / 112**: National Police & Emergency Service
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quickstart: Running Locally
+
+AfyaConnect runs out-of-the-box with **zero external paid keys required** using its built-in clinical decision engine.
 
 ### Prerequisites
-- **Node.js**: v18.0.0 or higher
-- **npm** or **yarn** / **pnpm**
+- Python 3.10+
+- Node.js 18+
 
-### Installation
+### Setup & Launch in One Command
+
 ```bash
-# Clone the repository
+# 1. Clone repository
 git clone https://github.com/Edwin420s/AfyaConnect.git
 cd AfyaConnect
 
-# Install dependencies
+# 2. Install dependencies
 npm install
+pip install -r backend/requirements.txt
+
+# 3. Launch full stack (Backend + Frontend)
+./scripts/run_local.sh
 ```
 
-### Running Locally
-```bash
-# Start Vite development server
-npm run dev
-```
-Open your browser at `http://localhost:5173`.
+### Local Endpoints
+- **Frontend App**: `http://localhost:5173`
+- **Backend API**: `http://127.0.0.1:8000`
+- **Interactive Swagger Docs**: `http://127.0.0.1:8000/docs`
+- **Health Check**: `http://127.0.0.1:8000/health`
 
-### Production Build
+---
+
+## 🧪 Testing & Verification
+
+AfyaConnect includes a comprehensive automated test suite covering unit, integration, and end-to-end communication tests:
+
 ```bash
-# Type check and build bundle
+# Run backend pytest suite
+python3 -m pytest backend/tests -v
+
+# Run Node.js frontend <-> backend E2E communication test
+node scripts/test_frontend_backend_comm.mjs
+
+# Build production bundle
 npm run build
-
-# Preview production build locally
-npm run preview
-```
-
-### Database Integration
-```bash
-# Generate Prisma Client
-npx prisma generate
-
-# Push schema changes to your PostgreSQL instance
-npx prisma db push
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## 📡 API Reference Summary
 
-Create a `.env` file in the project root:
-
-```env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/afyaconnect?schema=public"
-
-# Anthropic Claude API (Optional - client includes mock fallback)
-VITE_ANTHROPIC_API_KEY="your-anthropic-api-key-here"
-```
-
----
-
-## 👥 Roles & Workflows
-
-1. **Patient**:
-   - Describe symptoms via conversational AI in English or Swahili.
-   - Review triage classification and urgency.
-   - Select nearby accredited facilities.
-   - Choose an available doctor slot and receive a verified Token Pass.
-2. **Hospital Staff**:
-   - Monitor real-time triage requests from incoming patients.
-   - Verify insurance coverage (SHA/Linda Mama).
-   - Assign patients to available departments and doctors.
-3. **Doctor**:
-   - Inspect upcoming consultations and clinical AI summaries.
-   - Mark patients as seen and update consultation status.
-4. **Admin**:
-   - Review emergency escalation rates.
-   - Monitor system throughput and triage safety logs.
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/health` | Service health & hotline status |
+| `GET` | `/api/facilities` | List participating Kenyan healthcare facilities |
+| `POST` | `/api/conversations/interact` | Patient chat/voice intake with Claude triage |
+| `GET` | `/api/availability/check` | Real hospital doctor availability roster |
+| `POST` | `/api/appointments/book` | Confirm appointment & generate `#AC-NBO-XXXX` pass |
+| `GET` | `/api/hospital/dashboard` | Hospital receptionist dashboard & central inbox |
+| `POST` | `/api/hospital/care-requests/:id/assign-doctor` | Assign department & doctor to request |
+| `POST` | `/api/hospital/care-requests/:id/confirm-slot` | Propose/confirm consultation slot |
+| `GET` | `/api/doctor/dashboard` | Doctor schedule & today's queue |
+| `GET` | `/api/admin` | Platform oversight & audit trail |
 
 ---
 
 ## 📄 License
-
-This project is licensed under the ISC License.
+ISC License • Built for the Kenyan Healthcare Ecosystem.
