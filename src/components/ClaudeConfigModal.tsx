@@ -14,7 +14,7 @@ import {
 import { AFYACONNECT_TOOLS } from '../lib/claude/tools';
 
 export const ClaudeConfigModal: React.FC = () => {
-  const { isClaudeConfigOpen, setIsClaudeConfigOpen, showToast } = useApp();
+  const { isClaudeConfigOpen, setIsClaudeConfigOpen, currentRole, showToast } = useApp();
 
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -24,15 +24,16 @@ export const ClaudeConfigModal: React.FC = () => {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
-    if (isClaudeConfigOpen) {
+    if (isClaudeConfigOpen && currentRole === 'admin') {
       setApiKey(getAnthropicApiKey());
       setSelectedModel(getSelectedClaudeModel());
       setIsLiveEnabled(isLiveApiEnabled());
       setTestResult(null);
     }
-  }, [isClaudeConfigOpen]);
+  }, [isClaudeConfigOpen, currentRole]);
 
-  if (!isClaudeConfigOpen) return null;
+  // Claude works strictly in the background; only accessible via Admin panel
+  if (!isClaudeConfigOpen || currentRole !== 'admin') return null;
 
   const handleSave = () => {
     setAnthropicApiKey(apiKey.trim());

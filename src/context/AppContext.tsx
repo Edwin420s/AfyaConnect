@@ -11,6 +11,7 @@ import {
   assignDoctorOnBackend,
   confirmSlotOnBackend,
   fetchBackendFacilities,
+  fetchHospitalDashboard,
 } from '../lib/api/client';
 
 interface AppContextType {
@@ -77,6 +78,20 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const WELCOME_CHAT_MESSAGE: ChatMessage = {
+  id: 'welcome-afyaconnect',
+  sender: 'assistant',
+  text: 'Habari! Karibu AfyaConnect. How can we help you today? You can explain what you are experiencing in English, Kiswahili, or Sheng, and I will help you navigate care and find available doctors.',
+  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  dialectTag: 'AFYACONNECT BILINGUAL',
+  options: [
+    'Nimekuwa na maumivu ya tumbo (Stomach pain)',
+    'Nahitaji kuona daktari kesho asubuhi',
+    'Mtoto ana homa kali (Child fever)',
+    'Routine check-up & BP refill',
+  ],
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentRole, setCurrentRole] = useState<UserRole>('patient');
   const [activePatientTab, setActivePatientTab] = useState<'triage' | 'vituo' | 'miadi' | 'hospital'>('triage');
@@ -88,7 +103,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [facilities, setFacilities] = useState<Facility[]>(INITIAL_FACILITIES);
   const [careRequests, setCareRequests] = useState<CareRequest[]>(INITIAL_CARE_REQUESTS);
   const [activeRequestId, setActiveRequestId] = useState<string>('#10482');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([WELCOME_CHAT_MESSAGE]);
+
+  // Load real facilities and live care requests from backend database on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadRealBackendData() {
+      try {
+        // 1. Fetch real facilities from backend API
+        const realFacilities = await fetchBackendFacilities();
+        if (isMounted && realFacilities && Array.isArray(realFacilities) && realFacilities.length > 0) {
+          setFacilities(realFacilities);
+        }
+
+        // 2. Fetch live care requests & inbox from backend hospital dashboard
+        const dashboardData = await fetchHospitalDashboard('f-agakhan');
+        if (isMounted && dashboardData && dashboardData.inbox && Array.isArray(dashboardData.inbox) && dashboardData.inbox.length > 0) {
+          setCareRequests(dashboardData.inbox);
+          if (dashboardData.inbox[0]?.id) {
+            setActiveRequestId(dashboardData.inbox[0].id);
+          }
+        }
+      } catch (err) {
+        console.warn('Real backend data fetch notice, keeping resilient state:', err);
+      }
+    }
+
+    loadRealBackendData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [isBookingSheetOpen, setIsBookingSheetOpen] = useState<boolean>(false);
   const [pendingBooking, setPendingBooking] = useState({
