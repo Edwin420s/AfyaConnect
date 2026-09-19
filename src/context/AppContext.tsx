@@ -1,0 +1,454 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { UserRole, Language, CareRequest, Facility, ChatMessage, TimelineStep } from '../types';
+import { INITIAL_FACILITIES, INITIAL_CARE_REQUESTS, INITIAL_CHAT_MESSAGES } from '../data/mockData';
+import { orchestratePatientInteractionAsync } from '../lib/claude/orchestrator';
+import { dispatchAppointmentConfirmedNotification } from '../lib/services/notificationService';
+
+interface AppContextType {
+  // Role & Navigation
+  currentRole: UserRole;
+  setCurrentRole: (role: UserRole) => void;
+  activePatientTab: 'triage' | 'vituo' | 'miadi' | 'hospital';
+  setActivePatientTab: (tab: 'triage' | 'vituo' | 'miadi' | 'hospital') => void;
+  selectedFacilityForDetail: string | null;
+  setSelectedFacilityForDetail: (id: string | null) => void;
+  
+  // Language & Location
+  languagePreference: 'swa_eng' | 'swa' | 'eng';
+  toggleLanguagePreference: () => void;
+  userLocationText: string;
+  isGpsActive: boolean;
+  toggleGps: () => void;
+  
+  // Data State
+  facilities: Facility[];
+  careRequests: CareRequest[];
+  activeRequestId: string;
+  setActiveRequestId: (id: string) => void;
+  activeRequest: CareRequest;
+  chatMessages: ChatMessage[];
+  
+  // Patient Actions
+  sendMessage: (text: string, isAudioSnippet?: boolean) => void;
+  selectSlotForBooking: (hospitalName: string, doctorName: string, slotTime: string, facilityId?: string) => void;
+  confirmBooking: (phone: string) => void;
+  rescheduleBooking: (newSlot: string) => void;
+  cancelBooking: () => void;
+  
+  // Hospital Actions
+  assignDoctorToRequest: (requestId: string, doctorName: string, slotTime: string) => void;
+  confirmSlotFromHospital: (requestId: string, doctorName: string, slotTime: string) => void;
+  addCustomHospitalSlot: (doctorId: string, slotTime: string) => void;
+  updateRequestDepartment: (requestId: string, department: string) => void;
+  
+  // Booking Sheet UI
+  isBookingSheetOpen: boolean;
+  setIsBookingSheetOpen: (open: boolean) => void;
+  pendingBooking: {
+    hospital: string;
+    doctor: string;
+    slot: string;
+    facilityId: string;
+  };
+  setPendingBooking: React.Dispatch<React.SetStateAction<{ hospital: string; doctor: string; slot: string; facilityId: string }>>;
+
+  // Toast Notification
+  toast: { message: string; visible: boolean };
+  showToast: (message: string) => void;
+
+  // Emergency SOS Modal
+  isEmergencyModalOpen: boolean;
+  setIsEmergencyModalOpen: (open: boolean) => void;
+
+  // Claude AI Configuration Modal & Thinking State
+  isClaudeConfigOpen: boolean;
+  setIsClaudeConfigOpen: (open: boolean) => void;
+  isAiThinking: boolean;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [currentRole, setCurrentRole] = useState<UserRole>('patient');
+  const [activePatientTab, setActivePatientTab] = useState<'triage' | 'vituo' | 'miadi' | 'hospital'>('triage');
+  const [selectedFacilityForDetail, setSelectedFacilityForDetail] = useState<string | null>('f-agakhan');
+  const [languagePreference, setLanguagePreference] = useState<'swa_eng' | 'swa' | 'eng'>('swa_eng');
+  const [userLocationText, setUserLocationText] = useState<string>('Westlands, Nairobi • < 2.5 km');
+  const [isGpsActive, setIsGpsActive] = useState<boolean>(true);
+
+  const [facilities, setFacilities] = useState<Facility[]>(INITIAL_FACILITIES);
+  const [careRequests, setCareRequests] = useState<CareRequest[]>(INITIAL_CARE_REQUESTS);
+  const [activeRequestId, setActiveRequestId] = useState<string>('#10482');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
+
+  const [isBookingSheetOpen, setIsBookingSheetOpen] = useState<boolean>(false);
+  const [pendingBooking, setPendingBooking] = useState({
+    hospital: 'Aga Khan Univ. Hospital',
+    doctor: 'Dr. Wanjiku Kamau',
+    slot: 'Leo 3:30 PM',
+    facilityId: 'f-agakhan',
+  });
+
+  const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState<boolean>(false);
+  const [isClaudeConfigOpen, setIsClaudeConfigOpen] = useState<boolean>(false);
+  const [isAiThinking, setIsAiThinking] = useState<boolean>(false);
+
+  const showToast = (message: string) => {
+    setToast({ message, visible: true });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, visible: false }));
+    }, 3200);
+  };
+
+  const toggleLanguagePreference = () => {
+    setLanguagePreference(prev => {
+      if (prev === 'swa_eng') return 'swa';
+      if (prev === 'swa') return 'eng';
+      return 'swa_eng';
+    });
+    showToast(
+      languagePreference === 'swa_eng'
+        ? 'Lugha: Kiswahili Pekee'
+        : languagePreference === 'swa'
+        ? 'Language: English Only'
+        : 'Lugha: Sheng, Swahili & English (Code-switch)'
+    );
+  };
+
+  const toggleGps = () => {
+    setIsGpsActive(prev => !prev);
+    if (!isGpsActive) {
+      setUserLocationText('Westlands, Nairobi • < 2.5 km (Live GPS)');
+      showToast('📍 Mahali pamepatikana kwa GPS (Westlands & Parklands)');
+    } else {
+      setUserLocationText('Nairobi Central (Manual Selection)');
+      showToast('📍 GPS imezimwa. Eneo: Nairobi Central');
+    }
+  };
+
+  const activeRequest = careRequests.find(r => r.id === activeRequestId) || careRequests[0];
+
+  // Send message in patient chat using Claude Agent Orchestrator
+  const sendMessage = async (text: string, isAudioSnippet: boolean = false) => {
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newPatientMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      sender: 'patient',
+      text,
+      timestamp: timeNow,
+      isAudioSnippet,
+      audioDuration: isAudioSnippet ? '0:24s' : undefined,
+      dialectTag: languagePreference === 'swa' ? 'KISWAHILI' : languagePreference === 'eng' ? 'ENGLISH' : 'SHG / SWA',
+    };
+
+    const updatedHistory = [...chatMessages, newPatientMsg];
+    setChatMessages(updatedHistory);
+    setIsAiThinking(true);
+
+    try {
+      const result = await orchestratePatientInteractionAsync(
+        text,
+        isAudioSnippet,
+        languagePreference,
+        {
+          patientName: 'Jane M.',
+          patientPhone: '+254 712 345 678',
+          patientLocation: userLocationText,
+        },
+        updatedHistory
+      );
+
+      if (result.isEmergencyAlert) {
+        setIsEmergencyModalOpen(true);
+      }
+
+      setChatMessages(prev => [...prev, result.message]);
+
+      if (result.createdCareRequest) {
+        setCareRequests(prev => [result.createdCareRequest!, ...prev]);
+        setActiveRequestId(result.createdCareRequest.id);
+      }
+    } catch (err: any) {
+      console.error('Claude Agent Orchestration error:', err);
+      showToast('Hitilafu ya AI. Jaribu tena.');
+    } finally {
+      setIsAiThinking(false);
+    }
+  };
+
+  // When patient selects slot from Vituo or Chat
+  const selectSlotForBooking = (hospitalName: string, doctorName: string, slotTime: string, facilityId: string = 'f-agakhan') => {
+    setPendingBooking({
+      hospital: hospitalName,
+      doctor: doctorName,
+      slot: slotTime,
+      facilityId,
+    });
+    setIsBookingSheetOpen(true);
+  };
+
+  // Confirm booking from sheet or feedback card
+  const confirmBooking = (phone: string) => {
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const token = `#AC-NBO-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    setCareRequests(prev =>
+      prev.map(req => {
+        if (req.id === activeRequestId || req.id === '#10482') {
+          const updatedTimeline: TimelineStep[] = [
+            { step: 1, title: '1. Ombi Limepokelewa', description: 'Triage intake initiated from app', timestamp: '09:15 AM', completed: true, active: false },
+            { step: 2, title: '2. Hospital Central Triage Synced', description: 'HMIS Gateway handshake validated', timestamp: '09:16 AM', completed: true, active: false },
+            { step: 3, title: '3. Idara: General Medicine', description: 'Auto-routed by clinical algorithm', timestamp: '09:18 AM', completed: true, active: false },
+            { step: 4, title: '4. Daktari Amethibitishwa', description: `${pendingBooking.doctor} calendar confirmed`, timestamp: '09:22 AM', completed: true, active: false },
+            { step: 5, title: '5. Saa Imependekezwa: ' + pendingBooking.slot, description: 'Consultation slot confirmed', timestamp: '09:23 AM', completed: true, active: false },
+            { step: 6, title: '6. Uthibitisho wa Mgonjwa', description: `Approved via Phone +254 ${phone}`, timestamp: timeNow, completed: true, active: false },
+            { step: 7, title: '7. MIADI IMETHIBITISHWA NA KUFUNGWA', description: `Ready for admission at ${pendingBooking.hospital}`, timestamp: timeNow, completed: true, active: true },
+          ];
+
+          return {
+            ...req,
+            assignedFacilityName: pendingBooking.hospital,
+            assignedDoctorName: pendingBooking.doctor,
+            assignedSlot: pendingBooking.slot,
+            status: 'CONFIRMED',
+            tokenPass: token,
+            patientPhone: `+254 ${phone}`,
+            timeline: updatedTimeline,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return req;
+      })
+    );
+
+    // Send SMS & WhatsApp Notification
+    dispatchAppointmentConfirmedNotification(
+      `+254 ${phone}`,
+      pendingBooking.doctor,
+      pendingBooking.hospital,
+      pendingBooking.slot,
+      token
+    );
+
+    // Add confirmation feedback card directly to conversation
+    const confirmationMsg: ChatMessage = {
+      id: `msg-${Date.now() + 1}`,
+      sender: 'assistant',
+      text: `Hongera! Miadi yako imethibitishwa rasmi na ${pendingBooking.doctor} katika ${pendingBooking.hospital}. Nambari yako ya geti ni ${token}.`,
+      timestamp: timeNow,
+      triageLevel: 'Confirmed',
+      dialectTag: 'Miadi Imethibitishwa',
+      feedbackCard: {
+        type: 'appointment_confirmed',
+        doctorName: pendingBooking.doctor,
+        department: 'General Consultation',
+        facilityName: pendingBooking.hospital,
+        date: 'Kesho, Jumanne 24 Sept',
+        time: pendingBooking.slot,
+        requestId: token,
+      },
+    };
+    setChatMessages(prev => [...prev, confirmationMsg]);
+
+    setIsBookingSheetOpen(false);
+    showToast(`✓ Miadi Imethibitishwa! Pass: ${token} (SMS & Pass imetumwa)`);
+    setActivePatientTab('miadi');
+  };
+
+  // Hospital assigns doctor
+  const assignDoctorToRequest = (requestId: string, doctorName: string, slotTime: string) => {
+    setCareRequests(prev =>
+      prev.map(r => {
+        if (r.id === requestId) {
+          const updatedTimeline = r.timeline.map(t => {
+            if (t.step === 4) return { ...t, completed: true, active: false, description: `${doctorName} assigned` };
+            if (t.step === 5) return { ...t, completed: true, active: true, title: `5. Saa Imependekezwa: ${slotTime}`, description: 'Slot held for patient' };
+            return t;
+          });
+          return {
+            ...r,
+            assignedDoctorName: doctorName,
+            assignedSlot: slotTime,
+            status: 'SLOT_PROPOSED',
+            timeline: updatedTimeline,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return r;
+      })
+    );
+    showToast(`Hospital: ${doctorName} amepewa ombi ${requestId} (${slotTime})`);
+  };
+
+  // Hospital confirms slot & dispatches
+  const confirmSlotFromHospital = (requestId: string, doctorName: string, slotTime: string) => {
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const token = `#AC-NBO-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    setCareRequests(prev =>
+      prev.map(r => {
+        if (r.id === requestId) {
+          const updatedTimeline = r.timeline.map(t => {
+            if (t.step <= 6) return { ...t, completed: true, active: false };
+            if (t.step === 7) return { ...t, completed: true, active: true, timestamp: timeNow };
+            return t;
+          });
+
+          return {
+            ...r,
+            assignedDoctorName: doctorName,
+            assignedSlot: slotTime,
+            status: 'CONFIRMED',
+            tokenPass: token,
+            timeline: updatedTimeline,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return r;
+      })
+    );
+    showToast(`✓ Dispatched to SHA & SMS! Slot confirmed for ${doctorName} at ${slotTime}`);
+  };
+
+  // Hospital updates department
+  const updateRequestDepartment = (requestId: string, department: string) => {
+    setCareRequests(prev =>
+      prev.map(r => {
+        if (r.id === requestId) {
+          const updatedTimeline = r.timeline.map(t => {
+            if (t.step === 3) {
+              return {
+                ...t,
+                completed: true,
+                active: true,
+                title: `3. Idara: ${department}`,
+                description: 'Updated by hospital triage lead',
+              };
+            }
+            return t;
+          });
+          return {
+            ...r,
+            assignedDepartment: department,
+            timeline: updatedTimeline,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return r;
+      })
+    );
+    showToast(`Ombi ${requestId} limepelekwa idara ya ${department}`);
+  };
+
+  // Reschedule booking
+  const rescheduleBooking = (newSlot: string) => {
+    setCareRequests(prev =>
+      prev.map(r => {
+        if (r.id === activeRequestId || r.id === '#10482') {
+          return {
+            ...r,
+            assignedSlot: newSlot,
+            status: 'RESCHEDULING',
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return r;
+      })
+    );
+    showToast(`Ombi la kubadilisha saa limepokelewa: ${newSlot}`);
+  };
+
+  // Cancel booking
+  const cancelBooking = () => {
+    setCareRequests(prev =>
+      prev.map(r => {
+        if (r.id === activeRequestId || r.id === '#10482') {
+          return {
+            ...r,
+            status: 'CANCELLED',
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return r;
+      })
+    );
+    showToast(`Miadi imeghairiwa. Hospitali imejulishwa.`);
+  };
+
+  // Add custom slot override
+  const addCustomHospitalSlot = (doctorId: string, slotTime: string) => {
+    setFacilities(prev =>
+      prev.map(f => {
+        return {
+          ...f,
+          doctors: f.doctors.map(d => {
+            if (d.id === doctorId) {
+              return {
+                ...d,
+                slots: [...d.slots, { id: `s-custom-${Date.now()}`, time: slotTime, isAvailable: true, label: `${slotTime} (Custom)` }],
+                freeSlotsCount: d.freeSlotsCount + 1,
+              };
+            }
+            return d;
+          }),
+        };
+      })
+    );
+    showToast(`Custom slot "${slotTime}" imeongezwa kwenye ratiba.`);
+  };
+
+  return (
+    <AppContext.Provider
+      value={{
+        currentRole,
+        setCurrentRole,
+        activePatientTab,
+        setActivePatientTab,
+        selectedFacilityForDetail,
+        setSelectedFacilityForDetail,
+        languagePreference,
+        toggleLanguagePreference,
+        userLocationText,
+        isGpsActive,
+        toggleGps,
+        facilities,
+        careRequests,
+        activeRequestId,
+        setActiveRequestId,
+        activeRequest,
+        chatMessages,
+        sendMessage,
+        selectSlotForBooking,
+        confirmBooking,
+        rescheduleBooking,
+        cancelBooking,
+        assignDoctorToRequest,
+        confirmSlotFromHospital,
+        addCustomHospitalSlot,
+        updateRequestDepartment,
+        isBookingSheetOpen,
+        setIsBookingSheetOpen,
+        pendingBooking,
+        setPendingBooking,
+        toast,
+        showToast,
+        isEmergencyModalOpen,
+        setIsEmergencyModalOpen,
+        isClaudeConfigOpen,
+        setIsClaudeConfigOpen,
+        isAiThinking,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+};
