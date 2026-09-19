@@ -238,7 +238,7 @@ export const MyAppointment: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-bold text-sm text-on-surface">Hali ya Maombi (Status)</h3>
-            <p className="text-xs text-on-surface-variant">Live Referral Synchronization (7/7)</p>
+            <p className="text-xs text-on-surface-variant">Live Referral Synchronization ({activeRequest.timeline.filter(t => t.completed).length}/{activeRequest.timeline.length})</p>
           </div>
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary-container text-on-primary text-xs font-bold shadow-xs">
             <span className="material-symbols-outlined text-[14px]">done_all</span>

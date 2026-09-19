@@ -186,7 +186,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({ onOpenDeta
             <span className="material-symbols-outlined text-[18px] text-outline">history</span>
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-black text-on-surface">{doneCount + 2}</span>
+            <span className="text-2xl font-black text-on-surface">{completedCount + 2}</span>
             <span className="text-[11px] text-on-surface-variant font-medium">2 reschedule</span>
           </div>
         </div>

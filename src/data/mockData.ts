@@ -480,6 +480,7 @@ export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
       doctorName: 'Dr. Kamau (GP)',
       doctorSpecialty: 'Wait Time: ~15 mins',
       todaySlot: 'Leo 2:30 PM',
+      waitTime: '~15 mins',
       coverage: 'SHA / NHIF',
       facilityId: 'f-avenue',
     },
