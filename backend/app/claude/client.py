@@ -1,5 +1,6 @@
 import os
 import json
+import random
 import datetime
 import urllib.request
 import urllib.error
@@ -37,9 +38,14 @@ def orchestrate_patient_turn(
     if safety["isEmergency"]:
         return {
             "text": safety["recommendedAction"],
+            "responseMessage": safety["recommendedAction"],
+            "isEmergency": True,
             "isEmergencyAlert": True,
+            "triageScore": 5,
+            "urgency": "EMERGENCY",
             "triageLevel": "Triage Level 5 (Emergency)",
             "dialectTag": "Dharura / Emergency Alert",
+            "emergencyHotlines": safety.get("emergencyHotlines", []),
             "options": ["🚨 Piga 1199 (Red Cross)", "🏥 Tafuta Hospitali ya Dharura", "🚑 Piga 999 Ambulance"],
             "executedTools": [],
         }
@@ -65,8 +71,8 @@ def orchestrate_patient_turn(
     earliest_slot = avail["earliestAvailableSlot"]
 
     # 5. Create Structured Care Request in DB (Case #10482 style)
-    req_id = f"req-{int(datetime.datetime.utcnow().timestamp() * 1000)}"
-    ref_num = f"#{int(10487 + (datetime.datetime.utcnow().timestamp() % 1000))}"
+    req_id = f"req-{int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)}-{random.randint(100, 999)}"
+    ref_num = f"#{random.randint(20000, 99999)}"
 
     care_request = CareRequest(
         id=req_id,
@@ -169,21 +175,30 @@ def orchestrate_patient_turn(
         {
             "name": f["name"],
             "distance": f"{f['distanceKm']} km",
+            "distanceKm": f["distanceKm"],
             "driveTime": f["driveTime"],
             "earliestSlot": f["earliestSlot"],
             "leadDoctor": f["leadDoctor"],
             "facilityId": f["id"],
+            "id": f["id"],
+            "subCounty": f.get("subCounty", "Parklands Sub-County"),
         }
         for f in nearby[:3]
     ]
 
     return {
         "text": ai_text,
+        "responseMessage": ai_text,
+        "isEmergency": False,
         "isEmergencyAlert": False,
+        "triageScore": pathway["triageScore"],
+        "urgency": pathway["urgency"],
         "triageLevel": f"Triage Level {pathway['triageScore']}",
         "dialectTag": dialect_tag,
         "feedbackCard": feedback_card,
         "nearbyFacilities": nearby_options,
+        "careRequestId": care_request.id,
+        "referenceNumber": care_request.referenceNumber,
         "options": [
             f"Confirm Slot: {lead_doc} • {earliest_slot}",
             "📍 Ona Vituo / Other Options",
