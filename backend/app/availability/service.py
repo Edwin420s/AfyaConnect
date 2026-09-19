@@ -51,13 +51,25 @@ def get_facility_doctor_availability(
 
         # Generate slots based on doctor profile
         if doc.id == "doc-kamau-1":
-            all_slots = ["Leo 3:30 PM", "Kesho 10:30 AM", "Kesho 02:00 PM"]
+            all_slots = [
+                "Leo 09:30 AM", "Leo 10:30 AM", "Leo 11:30 AM", "Leo 02:00 PM", "Leo 03:30 PM", "Leo 04:30 PM",
+                "Kesho 09:00 AM", "Kesho 10:30 AM", "Kesho 11:30 AM", "Kesho 02:00 PM", "Kesho 03:30 PM", "Kesho 04:30 PM"
+            ]
         elif doc.id == "doc-achieng-1":
-            all_slots = ["Leo 11:15 AM", "Kesho 09:30 AM", "Kesho 03:00 PM"]
+            all_slots = [
+                "Leo 09:00 AM", "Leo 11:15 AM", "Leo 02:00 PM", "Leo 03:30 PM",
+                "Kesho 09:30 AM", "Kesho 11:00 AM", "Kesho 02:30 PM", "Kesho 03:00 PM"
+            ]
         elif doc.id == "doc-mwangi-1":
-            all_slots = ["Leo 5:00 PM", "Kesho 11:30 AM"]
+            all_slots = [
+                "Leo 10:00 AM", "Leo 02:00 PM", "Leo 05:00 PM",
+                "Kesho 09:00 AM", "Kesho 11:30 AM", "Kesho 03:30 PM"
+            ]
         else:
-            all_slots = ["Kesho 08:30 AM", "Kesho 10:00 AM"]
+            all_slots = [
+                "Leo 09:00 AM", "Leo 11:00 AM", "Leo 02:00 PM", "Leo 04:00 PM",
+                "Kesho 08:30 AM", "Kesho 10:00 AM", "Kesho 02:00 PM", "Kesho 03:30 PM"
+            ]
 
         free_slots = [s for s in all_slots if s not in booked_slots]
 
