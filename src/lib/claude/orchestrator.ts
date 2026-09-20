@@ -7,7 +7,7 @@
 import { runClaudeAgentLoop, ClaudeAgentLoopResult } from './api';
 import { ToolExecutionContext, ToolExecutionResult } from './toolExecutor';
 import { evaluateClinicalSafety } from './safety';
-import { determineCarePathway } from './careNavigation';
+import { determineCarePathway, analyzeClinicalIntake, SPECIALIST_ROSTER } from './careNavigation';
 import { findNearbyFacilitiesForClaude } from '../services/locationService';
 import { checkRealDoctorAvailability } from '../services/availabilityEngine';
 import { CareRequest, ChatMessage, FeedbackCardData } from '../../types';
@@ -75,100 +75,196 @@ export async function orchestratePatientInteractionAsync(
     };
   }
 
-  // 3. Resolve Recommended Hospital Card (Anti-hallucination source of truth)
-  const pathway = determineCarePathway(patientMessage);
-  const { facilities } = findNearbyFacilitiesForClaude(pathway.department, 4.5);
-  const primaryFacility = facilities[0] || {
-    id: 'f-agakhan',
-    name: 'Aga Khan Univ. Hospital',
-    subCounty: 'Parklands',
-    distanceKm: 1.4,
-    driveTime: '~6 min drive',
-    leadDoctor: 'Dr. Wanjiku Kamau',
-    earliestSlot: 'Leo 3:30 PM',
-  };
+  // 3. Resolve Clinical Intake & Specialist Routing
+  const intake = analyzeClinicalIntake(patientMessage, conversationHistory, languagePreference);
+  const pathway = intake.pathway;
+  const specialist = intake.specialist;
 
-  const availability = checkRealDoctorAvailability(primaryFacility.id, pathway.departmentCode);
-  const leadDoctor = availability.availableDoctors[0]?.doctorName || primaryFacility.leadDoctor;
-  const earliestSlot = availability.earliestAvailableSlot || primaryFacility.earliestSlot;
+  let responseMsg: ChatMessage;
+  let careRequestToUse: CareRequest;
 
-  // 4. Construct Structured Response Message
-  const responseMsg: ChatMessage = {
-    id: `msg-${Date.now() + 1}`,
-    sender: 'assistant',
-    text: loopResult.finalText,
-    timestamp: timeNow,
-    triageLevel: `Triage Level ${loopResult.triageScore}`,
-    dialectTag: loopResult.dialectTag,
-    feedbackCard: loopResult.feedbackCard || {
+  if (intake.needsClarification) {
+    const feedbackCard: FeedbackCardData = loopResult.feedbackCard || {
+      type: 'request_received',
+      department: pathway.department,
+      requestedTime: languagePreference === 'eng' ? 'Pending triage details' : languagePreference === 'swa' ? 'Inasubiri maelezo' : 'Pending triage details',
+      statusText: languagePreference === 'eng' ? 'Assessing symptoms' : languagePreference === 'swa' ? 'Inakaguliwa' : 'Checking symptoms',
+      facilityName: 'AfyaConnect Clinical Gateway',
+      requestId: loopResult.createdCareRequest?.id || `#${Math.floor(10487 + Math.random() * 500)}`,
+    };
+
+    responseMsg = {
+      id: `msg-${Date.now() + 1}`,
+      sender: 'assistant',
+      text: loopResult.finalText || intake.clarificationMessage,
+      timestamp: timeNow,
+      triageLevel: `Triage Level ${loopResult.triageScore}`,
+      dialectTag: loopResult.dialectTag,
+      feedbackCard,
+      options: intake.clarificationOptions,
+    };
+
+    careRequestToUse = loopResult.createdCareRequest || {
+      id: feedbackCard.requestId || `#${Math.floor(10487 + Math.random() * 500)}`,
+      patientName: context.patientName || 'Jane M.',
+      patientAge: 32,
+      patientPhone: context.patientPhone || '+254 712 345 678',
+      patientLocation: context.patientLocation || 'Westlands (2.1 km away)',
+      languageMode: (loopResult.dialectTag === 'ENGLISH' || loopResult.dialectTag === 'KISWAHILI'
+        ? loopResult.dialectTag
+        : 'SWA + ENG CODE-SWITCH') as 'SWA + ENG CODE-SWITCH' | 'ENGLISH' | 'KISWAHILI',
+      verbatimTranscript: `“${patientMessage}”`,
+      audioDurationSeconds: isAudioSnippet ? 24 : undefined,
+      chiefConcern: patientMessage.length > 35 ? patientMessage.slice(0, 35) + '...' : patientMessage,
+      symptomDuration: 'Initial intake',
+      secondarySymptoms: [pathway.department, 'Awaiting clinical details'],
+      triageScore: loopResult.triageScore,
+      urgency: loopResult.urgency,
+      clinicalSummary: `Intake in progress: ${patientMessage}. Proposed Department: ${pathway.department}. Triage Level: ${loopResult.triageScore}/5.`,
+      flags: ['Live Voice/Chat Intake', 'Clarification Active', 'SHA Member'],
+      insurance: 'SHA Active #602931-B',
+      distanceKm: 2.1,
+      preferredTime: 'Pending triage',
+      assignedFacilityId: specialist.facilityId || 'f-agakhan',
+      assignedFacilityName: 'AfyaConnect Clinical Gateway',
+      assignedDepartment: pathway.department,
+      status: 'AWAITING_REVIEW',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      timeline: [
+        { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: timeNow, completed: true, active: false },
+        { step: 2, title: 'Request received', description: 'Triage intake logged and symptom assessment in progress', timestamp: timeNow, completed: true, active: true },
+        { step: 3, title: 'Hospital received request', description: 'Hospital triage queue synced', timestamp: 'Pending', completed: false, active: false },
+        { step: 4, title: 'Department identified', description: `Proposed: ${pathway.department}`, timestamp: 'Pending', completed: false, active: false },
+        { step: 5, title: 'Doctor availability checked', description: 'Awaiting clinical details before doctor allocation', timestamp: 'Pending', completed: false, active: false },
+        { step: 6, title: 'Time proposed', description: 'Pending triage completion', timestamp: 'Pending', completed: false, active: false },
+        { step: 7, title: 'Patient confirmed', description: 'Pending', timestamp: 'Pending', completed: false, active: false },
+        { step: 8, title: 'APPOINTMENT BOOKED', description: 'Pending', timestamp: 'Pending', completed: false, active: false },
+      ],
+    };
+  } else {
+    // Clinical intake is complete -> route to specific specialist
+    const targetFacilityId = specialist.facilityId || 'f-agakhan';
+    const leadDoctor = specialist.doctorName || 'Dr. Wanjiku Kamau';
+    const specialtyName = specialist.specialist;
+
+    const { facilities } = findNearbyFacilitiesForClaude(pathway.department, 4.5);
+    const primaryFacility = facilities.find(f => f.id === targetFacilityId) || facilities[0] || {
+      id: 'f-agakhan',
+      name: 'Aga Khan Univ. Hospital',
+      subCounty: 'Parklands',
+      distanceKm: 1.4,
+      driveTime: '~6 min drive',
+      leadDoctor,
+      earliestSlot: 'Leo 3:30 PM',
+    };
+
+    const availability = checkRealDoctorAvailability(primaryFacility.id, pathway.departmentCode);
+    const matchedDoc = availability.availableDoctors.find(d => d.doctorName === leadDoctor);
+    const earliestSlot = matchedDoc?.freeSlots?.[0]?.time || availability.earliestAvailableSlot || primaryFacility.earliestSlot;
+
+    const isTomorrow = earliestSlot.toLowerCase().includes('kesho') || earliestSlot.toLowerCase().includes('tomorrow');
+    const cleanSlot = earliestSlot.replace(/Leo\s*|Kesho\s*|Today\s*|Tomorrow\s*/gi, '').trim();
+
+    let formattedDate = 'Tomorrow, Tuesday 24 Sept';
+    let formattedTime = `Tomorrow at ${cleanSlot}`;
+    let statusText = 'Verified Slot';
+
+    if (languagePreference === 'eng') {
+      formattedDate = isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Today, Sunday 20 Sept';
+      formattedTime = isTomorrow ? `Tomorrow at ${cleanSlot}` : `Today at ${cleanSlot}`;
+      statusText = 'Verified Slot';
+    } else if (languagePreference === 'swa') {
+      formattedDate = isTomorrow ? 'Kesho, Jumanne 24 Sept' : 'Leo, Jumapili 20 Sept';
+      formattedTime = isTomorrow ? `Kesho ${cleanSlot}` : `Leo ${cleanSlot}`;
+      statusText = 'Nafasi Imethibitishwa';
+    } else {
+      formattedDate = isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Leo, Jumapili 20 Sept';
+      formattedTime = isTomorrow ? `Kesho at ${cleanSlot}` : `Leo at ${cleanSlot}`;
+      statusText = 'Verified Slot';
+    }
+
+    const feedbackCard: FeedbackCardData = loopResult.feedbackCard || {
       type: 'doctor_availability',
       department: pathway.department,
-      requestedTime: 'Tomorrow morning / Leo',
-      statusText: 'Verified Slot',
+      requestedTime: languagePreference === 'eng' ? (isTomorrow ? 'Tomorrow' : 'Today') : (isTomorrow ? 'Kesho' : 'Leo'),
+      statusText,
       doctorName: leadDoctor,
-      date: 'Kesho, Jumanne 24 Sept',
-      time: earliestSlot,
+      date: formattedDate,
+      time: formattedTime,
       facilityName: primaryFacility.name,
       requestId: loopResult.createdCareRequest?.id || `#${Math.floor(10487 + Math.random() * 500)}`,
-    },
-    recommendedHospital: {
-      name: primaryFacility.name,
-      subCounty: primaryFacility.subCounty,
-      distance: `${primaryFacility.distanceKm} km away`,
-      doctorName: leadDoctor,
-      doctorSpecialty: pathway.suggestedSpecialty,
-      todaySlot: earliestSlot,
-      waitTime: '~15 mins wait',
-      coverage: 'SHA / NHIF Verified',
-      facilityId: primaryFacility.id,
-    },
-    options: [
-      `Confirm Slot: ${leadDoctor} • ${earliestSlot}`,
-      '📍 Ona Vituo / Other Options',
-      '🩺 Nahitaji daktari leo',
-    ],
-  };
+    };
 
-  const careRequestToUse: CareRequest = loopResult.createdCareRequest || {
-    id: responseMsg.feedbackCard?.requestId || `#${Math.floor(10487 + Math.random() * 500)}`,
-    patientName: context.patientName || 'Jane M.',
-    patientAge: 32,
-    patientPhone: context.patientPhone || '+254 712 345 678',
-    patientLocation: context.patientLocation || 'Westlands (2.1 km away)',
-    languageMode: (loopResult.dialectTag === 'ENGLISH' || loopResult.dialectTag === 'KISWAHILI'
-      ? loopResult.dialectTag
-      : 'SWA + ENG CODE-SWITCH') as 'SWA + ENG CODE-SWITCH' | 'ENGLISH' | 'KISWAHILI',
-    verbatimTranscript: `“${patientMessage}”`,
-    audioDurationSeconds: isAudioSnippet ? 24 : undefined,
-    chiefConcern: patientMessage.length > 35 ? patientMessage.slice(0, 35) + '...' : patientMessage,
-    symptomDuration: 'Ongoing inquiry (2-3 days)',
-    secondarySymptoms: [pathway.department, 'Postural trigger'],
-    triageScore: loopResult.triageScore,
-    urgency: loopResult.urgency,
-    clinicalSummary: `Intake: ${patientMessage}. Suggested Department: ${pathway.department}. Triage Level: ${loopResult.triageScore}/5.`,
-    flags: ['Live Voice/Chat Intake', 'SHA Member', 'Auto-Location Active'],
-    insurance: 'SHA Active #602931-B',
-    distanceKm: primaryFacility.distanceKm,
-    preferredTime: earliestSlot,
-    assignedFacilityId: primaryFacility.id,
-    assignedFacilityName: primaryFacility.name,
-    assignedDepartment: pathway.department,
-    assignedDoctorName: leadDoctor,
-    assignedSlot: earliestSlot,
-    status: 'AWAITING_REVIEW',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    timeline: [
-      { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: timeNow, completed: true, active: false },
-      { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: timeNow, completed: true, active: true },
-      { step: 3, title: 'Hospital received request', description: `${primaryFacility.name} triage queue synced`, timestamp: 'Pending', completed: false, active: false },
-      { step: 4, title: 'Department identified', description: `Auto-routed to ${pathway.department}`, timestamp: 'Pending', completed: false, active: false },
-      { step: 5, title: 'Doctor availability checked', description: `${leadDoctor} calendar verified`, timestamp: 'Pending', completed: false, active: false },
-      { step: 6, title: 'Time proposed', description: `Proposed slot: ${earliestSlot}`, timestamp: 'Pending', completed: false, active: false },
-      { step: 7, title: 'Patient confirmed', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
-      { step: 8, title: 'APPOINTMENT BOOKED', description: 'Digital token pass generation', timestamp: 'Pending', completed: false, active: false },
-    ],
-  };
+    const responseOptions = languagePreference === 'eng'
+      ? [`Confirm Slot: ${leadDoctor} • ${formattedTime}`, '📍 Check Nearby Facilities', '🩺 I need a doctor today']
+      : languagePreference === 'swa'
+      ? [`Thibitisha: ${leadDoctor} • ${formattedTime}`, '📍 Tazama Vituo Vilivyo Karibu', '🩺 Nahitaji daktari leo']
+      : [`Confirm Slot: ${leadDoctor} • ${formattedTime}`, '📍 Ona Vituo / Other Options', '🩺 Nahitaji daktari leo'];
+
+    responseMsg = {
+      id: `msg-${Date.now() + 1}`,
+      sender: 'assistant',
+      text: loopResult.finalText,
+      timestamp: timeNow,
+      triageLevel: `Triage Level ${loopResult.triageScore}`,
+      dialectTag: loopResult.dialectTag,
+      feedbackCard,
+      recommendedHospital: {
+        name: primaryFacility.name,
+        subCounty: primaryFacility.subCounty,
+        distance: `${primaryFacility.distanceKm} km away`,
+        doctorName: leadDoctor,
+        doctorSpecialty: specialtyName,
+        todaySlot: earliestSlot,
+        waitTime: '~15 mins wait',
+        coverage: 'SHA / NHIF Verified',
+        facilityId: primaryFacility.id,
+      },
+      options: responseOptions,
+    };
+
+    careRequestToUse = loopResult.createdCareRequest || {
+      id: feedbackCard.requestId || `#${Math.floor(10487 + Math.random() * 500)}`,
+      patientName: context.patientName || 'Jane M.',
+      patientAge: 32,
+      patientPhone: context.patientPhone || '+254 712 345 678',
+      patientLocation: context.patientLocation || 'Westlands (2.1 km away)',
+      languageMode: (loopResult.dialectTag === 'ENGLISH' || loopResult.dialectTag === 'KISWAHILI'
+        ? loopResult.dialectTag
+        : 'SWA + ENG CODE-SWITCH') as 'SWA + ENG CODE-SWITCH' | 'ENGLISH' | 'KISWAHILI',
+      verbatimTranscript: `“${patientMessage}”`,
+      audioDurationSeconds: isAudioSnippet ? 24 : undefined,
+      chiefConcern: patientMessage.length > 35 ? patientMessage.slice(0, 35) + '...' : patientMessage,
+      symptomDuration: 'Ongoing inquiry (2-3 days)',
+      secondarySymptoms: [pathway.department, specialtyName],
+      triageScore: loopResult.triageScore,
+      urgency: loopResult.urgency,
+      clinicalSummary: `Intake: ${patientMessage}. Specialist: ${specialtyName} (${leadDoctor}). Department: ${pathway.department}. Triage Level: ${loopResult.triageScore}/5.`,
+      flags: ['Live Voice/Chat Intake', 'Specialist Matched', 'SHA Member', 'Auto-Location Active'],
+      insurance: 'SHA Active #602931-B',
+      distanceKm: primaryFacility.distanceKm,
+      preferredTime: earliestSlot,
+      assignedFacilityId: primaryFacility.id,
+      assignedFacilityName: primaryFacility.name,
+      assignedDepartment: pathway.department,
+      assignedDoctorName: leadDoctor,
+      assignedSlot: earliestSlot,
+      status: 'AWAITING_REVIEW',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      timeline: [
+        { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: timeNow, completed: true, active: false },
+        { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: timeNow, completed: true, active: false },
+        { step: 3, title: 'Hospital received request', description: `${primaryFacility.name} triage queue synced`, timestamp: timeNow, completed: true, active: true },
+        { step: 4, title: 'Department identified', description: `Auto-routed to ${pathway.department} (${specialtyName})`, timestamp: timeNow, completed: true, active: false },
+        { step: 5, title: 'Doctor availability checked', description: `${leadDoctor} calendar verified on duty`, timestamp: timeNow, completed: true, active: false },
+        { step: 6, title: 'Time proposed', description: `Proposed slot: ${earliestSlot}`, timestamp: timeNow, completed: true, active: true },
+        { step: 7, title: 'Patient confirmed', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
+        { step: 8, title: 'APPOINTMENT BOOKED', description: 'Digital token pass generation', timestamp: 'Pending', completed: false, active: false },
+      ],
+    };
+  }
 
   return {
     message: responseMsg,
@@ -206,46 +302,132 @@ export function orchestratePatientInteraction(
     };
   }
 
-  // 2. Care Pathway Determination
-  const pathway = determineCarePathway(patientMessage);
+  // 2. Clinical Intake Evaluation & Specialist Routing
+  const intake = analyzeClinicalIntake(patientMessage, [], languagePreference);
+  const pathway = intake.pathway;
+  const specialist = intake.specialist;
+
+  if (intake.needsClarification) {
+    const feedbackCard: FeedbackCardData = {
+      type: 'request_received',
+      department: pathway.department,
+      requestedTime: languagePreference === 'eng' ? 'Pending triage details' : languagePreference === 'swa' ? 'Inasubiri maelezo' : 'Pending triage details',
+      statusText: languagePreference === 'eng' ? 'Assessing symptoms' : languagePreference === 'swa' ? 'Inakaguliwa' : 'Checking symptoms',
+      facilityName: 'AfyaConnect Clinical Gateway',
+      requestId: `#${Math.floor(10487 + Math.random() * 500)}`,
+    };
+
+    const responseMsg: ChatMessage = {
+      id: `msg-${Date.now() + 1}`,
+      sender: 'assistant',
+      text: intake.clarificationMessage,
+      timestamp: timeNow,
+      triageLevel: `Triage Level ${pathway.triageScore}`,
+      dialectTag: languagePreference === 'eng' ? 'ENGLISH' : languagePreference === 'swa' ? 'KISWAHILI PEKEE' : 'SWA + ENG CODE-SWITCH',
+      feedbackCard,
+      options: intake.clarificationOptions,
+    };
+
+    const newCareRequest: CareRequest = {
+      id: feedbackCard.requestId || `#${Math.floor(10487 + Math.random() * 500)}`,
+      patientName: 'Jane M.',
+      patientAge: 32,
+      patientPhone: '+254 712 345 678',
+      patientLocation: 'Westlands (2.1 km away)',
+      languageMode: languagePreference === 'eng' ? 'ENGLISH' : languagePreference === 'swa' ? 'KISWAHILI' : 'SWA + ENG CODE-SWITCH',
+      verbatimTranscript: `“${patientMessage}”`,
+      audioDurationSeconds: isAudioSnippet ? 24 : undefined,
+      chiefConcern: patientMessage.length > 35 ? patientMessage.slice(0, 35) + '...' : patientMessage,
+      symptomDuration: 'Initial intake',
+      secondarySymptoms: [pathway.department, 'Awaiting clinical details'],
+      triageScore: pathway.triageScore,
+      urgency: pathway.urgency,
+      clinicalSummary: `Intake in progress: ${patientMessage}. Proposed Department: ${pathway.department}. Triage Level: ${pathway.triageScore}/5.`,
+      flags: ['Live Voice/Chat Intake', 'Clarification Active', 'SHA Member'],
+      insurance: 'SHA Active #602931-B',
+      distanceKm: 2.1,
+      preferredTime: 'Pending triage',
+      assignedFacilityId: specialist.facilityId || 'f-agakhan',
+      assignedFacilityName: 'AfyaConnect Clinical Gateway',
+      assignedDepartment: pathway.department,
+      status: 'AWAITING_REVIEW',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      timeline: [
+        { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: timeNow, completed: true, active: false },
+        { step: 2, title: 'Request received', description: 'Triage intake logged and symptom assessment in progress', timestamp: timeNow, completed: true, active: true },
+        { step: 3, title: 'Hospital received request', description: 'Hospital triage queue synced', timestamp: 'Pending', completed: false, active: false },
+        { step: 4, title: 'Department identified', description: `Proposed: ${pathway.department}`, timestamp: 'Pending', completed: false, active: false },
+        { step: 5, title: 'Doctor availability checked', description: 'Awaiting clinical details before doctor allocation', timestamp: 'Pending', completed: false, active: false },
+        { step: 6, title: 'Time proposed', description: 'Pending triage completion', timestamp: 'Pending', completed: false, active: false },
+        { step: 7, title: 'Patient confirmed', description: 'Pending', timestamp: 'Pending', completed: false, active: false },
+        { step: 8, title: 'APPOINTMENT BOOKED', description: 'Pending', timestamp: 'Pending', completed: false, active: false },
+      ],
+    };
+
+    return {
+      message: responseMsg,
+      createdCareRequest: newCareRequest,
+      isEmergencyAlert: false,
+    };
+  }
+
+  // Clinical intake complete -> Match specific specialist
+  const targetFacilityId = specialist.facilityId || 'f-agakhan';
+  const leadDoctor = specialist.doctorName || 'Dr. Wanjiku Kamau';
+  const specialtyName = specialist.specialist;
 
   // 3. Location & Nearby Facilities Tool Resolution
   const { facilities } = findNearbyFacilitiesForClaude(pathway.department, 4.5);
-  const primaryFacility = facilities[0] || {
+  const primaryFacility = facilities.find(f => f.id === targetFacilityId) || facilities[0] || {
     id: 'f-agakhan',
     name: 'Aga Khan Univ. Hospital',
     subCounty: 'Parklands',
     distanceKm: 1.4,
     driveTime: '~6 min drive',
-    leadDoctor: 'Dr. Wanjiku Kamau',
+    leadDoctor,
     earliestSlot: 'Leo 3:30 PM',
   };
 
   // 4. Check Doctor Availability Tool Resolution (Anti-hallucination source of truth)
   const availability = checkRealDoctorAvailability(primaryFacility.id, pathway.departmentCode);
-  const leadDoctor = availability.availableDoctors[0]?.doctorName || primaryFacility.leadDoctor;
-  const earliestSlot = availability.earliestAvailableSlot || primaryFacility.earliestSlot;
+  const matchedDoc = availability.availableDoctors.find(d => d.doctorName === leadDoctor);
+  const earliestSlot = matchedDoc?.freeSlots?.[0]?.time || availability.earliestAvailableSlot || primaryFacility.earliestSlot;
 
   // 5. Construct Empathetic Bilingual Text
   let aiText = '';
   let dialectTag = 'Swahili + English Response';
   const lower = patientMessage.toLowerCase();
 
+  const isTomorrow = earliestSlot.toLowerCase().includes('kesho') || earliestSlot.toLowerCase().includes('tomorrow');
+  const cleanSlot = earliestSlot.replace(/Leo\s*|Kesho\s*|Today\s*|Tomorrow\s*/gi, '').trim();
+
+  let formattedDate = 'Tomorrow, Tuesday 24 Sept';
+  let formattedTime = `Tomorrow at ${cleanSlot}`;
+  let statusText = 'Verified Slot';
+
   if (languagePreference === 'swa') {
     dialectTag = 'KISWAHILI PEKEE';
-    aiText = `Nimekuelewa vizuri. ${pathway.explanationSwahili} Nimepata vituo ${facilities.length} vilivyo karibu nawe hapa ${primaryFacility.subCounty} vyenye nafasi ya daktari ${leadDoctor} leo au kesho.`;
+    formattedDate = isTomorrow ? 'Kesho, Jumanne 24 Sept' : 'Leo, Jumapili 20 Sept';
+    formattedTime = isTomorrow ? `Kesho ${cleanSlot}` : `Leo ${cleanSlot}`;
+    statusText = 'Nafasi Imethibitishwa';
+    aiText = `Kulingana na maelezo ya dalili zako, ninapendekeza mashauriano na ${specialtyName} (${leadDoctor}) katika kitengo cha ${pathway.department} hapa ${primaryFacility.name}. ${pathway.explanationSwahili} Nafasi ya daktari inapatikana ${formattedTime}. Je, ungependa kuthibitisha miadi hii?`;
   } else if (languagePreference === 'eng') {
     dialectTag = 'ENGLISH';
-    aiText = `I understand what you are experiencing. ${pathway.explanationEnglish} I found ${facilities.length} healthcare centers near you in ${primaryFacility.subCounty} with consultation slots available with ${leadDoctor}.`;
+    formattedDate = isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Today, Sunday 20 Sept';
+    formattedTime = isTomorrow ? `Tomorrow at ${cleanSlot}` : `Today at ${cleanSlot}`;
+    statusText = 'Verified Slot';
+    aiText = `Based on your symptoms, I recommend a consultation with ${specialtyName} (${leadDoctor}) in the ${pathway.department} department at ${primaryFacility.name}. ${pathway.explanationEnglish} A verified slot is available ${formattedTime}. Would you like to book this appointment?`;
   } else {
-    // Kenyan Code-Switching (Sheng / Swahili + English)
     dialectTag = 'SWA + ENG CODE-SWITCH';
-    if (lower.includes('kichwa') || lower.includes('headache') || lower.includes('dizzy')) {
-      aiText = `Pole sana. Nimekuelewa vizuri: maumivu ya kichwa kwa siku kadhaa na kizunguzungu yanaweza kuhitaji uchunguzi wa daktari. I have detected 3 healthcare centers nearby with general consultation slots available today and tomorrow.`;
-    } else if (lower.includes('tumbo') || lower.includes('stomach') || lower.includes('fever')) {
-      aiText = `Pole sana kwa maumivu ya tumbo. Nimetambua kuwa una maumivu yanayoendelea. Kuna nafasi ya daktari ${leadDoctor} katika ${primaryFacility.name} leo saa ${earliestSlot}.`;
+    formattedDate = isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Leo, Jumapili 20 Sept';
+    formattedTime = isTomorrow ? `Kesho at ${cleanSlot}` : `Leo at ${cleanSlot}`;
+    statusText = 'Verified Slot';
+    const userHasSwahili = /nimekuwa|nahisi|tumbo|kichwa|daktari|kesho|leo|homa|mtoto|masikio|jino|ngozi|kuona/i.test(lower);
+    if (!userHasSwahili) {
+      aiText = `Based on your description, I recommend consulting with ${specialtyName} (${leadDoctor}) in ${pathway.department} at ${primaryFacility.name}. ${pathway.explanationEnglish} A slot is available ${formattedTime}. Would you like to book this appointment?`;
     } else {
-      aiText = `Nimekuelewa vizuri. Mfumo wa AfyaConnect umeunganishwa na vituo vya afya vilivyo karibu nawe. Daktari ${leadDoctor} anaweza kukuona leo au kesho. Je, ungependa kupangiwa nafasi hii?`;
+      aiText = `Pole sana, nimekuelewa vizuri: ${pathway.explanationSwahili} Ninapendekeza ${specialtyName} (${leadDoctor}) katika hospitali ya ${primaryFacility.name}. Kuna nafasi ${formattedTime}. Je, ungependa kuthibitisha miadi hii?`;
     }
   }
 
@@ -253,14 +435,20 @@ export function orchestratePatientInteraction(
   const feedbackCard: FeedbackCardData = {
     type: 'doctor_availability',
     department: pathway.department,
-    requestedTime: 'Tomorrow morning / Leo',
-    statusText: 'Verified Slot',
+    requestedTime: languagePreference === 'eng' ? (isTomorrow ? 'Tomorrow' : 'Today') : (isTomorrow ? 'Kesho' : 'Leo'),
+    statusText,
     doctorName: leadDoctor,
-    date: 'Kesho, Jumanne 24 Sept',
-    time: earliestSlot,
+    date: formattedDate,
+    time: formattedTime,
     facilityName: primaryFacility.name,
     requestId: `#${Math.floor(10487 + Math.random() * 500)}`,
   };
+
+  const responseOptions = languagePreference === 'eng'
+    ? [`Confirm Slot: ${leadDoctor} • ${formattedTime}`, '📍 Check Nearby Facilities', '🩺 I need a doctor today']
+    : languagePreference === 'swa'
+    ? [`Thibitisha: ${leadDoctor} • ${formattedTime}`, '📍 Tazama Vituo Vilivyo Karibu', '🩺 Nahitaji daktari leo']
+    : [`Confirm Slot: ${leadDoctor} • ${formattedTime}`, '📍 Ona Vituo / Other Options', '🩺 Nahitaji daktari leo'];
 
   // 7. Structured Response Message
   const responseMsg: ChatMessage = {
@@ -276,17 +464,13 @@ export function orchestratePatientInteraction(
       subCounty: primaryFacility.subCounty,
       distance: `${primaryFacility.distanceKm} km away`,
       doctorName: leadDoctor,
-      doctorSpecialty: pathway.suggestedSpecialty,
+      doctorSpecialty: specialtyName,
       todaySlot: earliestSlot,
       waitTime: '~15 mins wait',
       coverage: 'SHA / NHIF Verified',
       facilityId: primaryFacility.id,
     },
-    options: [
-      `Confirm Slot: ${leadDoctor} • ${earliestSlot}`,
-      '📍 Ona Vituo / Other Options',
-      '🩺 Nahitaji daktari leo',
-    ],
+    options: responseOptions,
   };
 
   // 8. Create Structured Case for Hospital Reception Dashboard
@@ -296,16 +480,16 @@ export function orchestratePatientInteraction(
     patientAge: 32,
     patientPhone: '+254 712 345 678',
     patientLocation: 'Westlands (2.1 km away)',
-    languageMode: 'SWA + ENG CODE-SWITCH',
+    languageMode: languagePreference === 'eng' ? 'ENGLISH' : languagePreference === 'swa' ? 'KISWAHILI' : 'SWA + ENG CODE-SWITCH',
     verbatimTranscript: `“${patientMessage}”`,
     audioDurationSeconds: isAudioSnippet ? 24 : undefined,
     chiefConcern: patientMessage.length > 35 ? patientMessage.slice(0, 35) + '...' : patientMessage,
     symptomDuration: 'Ongoing inquiry (2-3 days)',
-    secondarySymptoms: [pathway.department, 'Postural trigger'],
+    secondarySymptoms: [pathway.department, specialtyName],
     triageScore: pathway.triageScore,
     urgency: pathway.urgency,
-    clinicalSummary: `Intake: ${patientMessage}. Suggested Department: ${pathway.department}. Triage Level: ${pathway.triageScore}/5.`,
-    flags: ['Live Voice/Chat Intake', 'SHA Member', 'Auto-Location Active'],
+    clinicalSummary: `Intake: ${patientMessage}. Specialist: ${specialtyName} (${leadDoctor}). Department: ${pathway.department}. Triage Level: ${pathway.triageScore}/5.`,
+    flags: ['Live Voice/Chat Intake', 'Specialist Matched', 'SHA Member', 'Auto-Location Active'],
     insurance: 'SHA Active #602931-B',
     distanceKm: primaryFacility.distanceKm,
     preferredTime: earliestSlot,
@@ -319,11 +503,11 @@ export function orchestratePatientInteraction(
     updatedAt: new Date().toISOString(),
     timeline: [
       { step: 1, title: 'CALL / CHAT MADE', description: 'Patient initiated triage conversation via app / audio', timestamp: timeNow, completed: true, active: false },
-      { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: timeNow, completed: true, active: true },
-      { step: 3, title: 'Hospital received request', description: `${primaryFacility.name} triage queue synced`, timestamp: 'Pending', completed: false, active: false },
-      { step: 4, title: 'Department identified', description: `Auto-routed to ${pathway.department}`, timestamp: 'Pending', completed: false, active: false },
-      { step: 5, title: 'Doctor availability checked', description: `${leadDoctor} calendar verified`, timestamp: 'Pending', completed: false, active: false },
-      { step: 6, title: 'Time proposed', description: `Proposed slot: ${earliestSlot}`, timestamp: 'Pending', completed: false, active: false },
+      { step: 2, title: 'Request received', description: 'Triage intake logged and pre-screened', timestamp: timeNow, completed: true, active: false },
+      { step: 3, title: 'Hospital received request', description: `${primaryFacility.name} triage queue synced`, timestamp: timeNow, completed: true, active: true },
+      { step: 4, title: 'Department identified', description: `Auto-routed to ${pathway.department} (${specialtyName})`, timestamp: timeNow, completed: true, active: false },
+      { step: 5, title: 'Doctor availability checked', description: `${leadDoctor} calendar verified on duty`, timestamp: timeNow, completed: true, active: false },
+      { step: 6, title: 'Time proposed', description: `Proposed slot: ${earliestSlot}`, timestamp: timeNow, completed: true, active: true },
       { step: 7, title: 'Patient confirmed', description: 'Patient confirmation pending', timestamp: 'Pending', completed: false, active: false },
       { step: 8, title: 'APPOINTMENT BOOKED', description: 'Digital token pass generation', timestamp: 'Pending', completed: false, active: false },
     ],

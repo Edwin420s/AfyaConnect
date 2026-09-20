@@ -8,7 +8,7 @@ import { AFYACONNECT_SYSTEM_PROMPT } from './prompts';
 import { AFYACONNECT_TOOLS } from './tools';
 import { executeAfyaConnectTool, ToolExecutionContext, ToolExecutionResult } from './toolExecutor';
 import { evaluateClinicalSafety } from './safety';
-import { determineCarePathway } from './careNavigation';
+import { determineCarePathway, analyzeClinicalIntake, SPECIALIST_ROSTER } from './careNavigation';
 import { findNearbyFacilitiesForClaude } from '../services/locationService';
 import { checkRealDoctorAvailability } from '../services/availabilityEngine';
 import { CareRequest, ChatMessage, FeedbackCardData } from '../../types';
@@ -213,12 +213,12 @@ export async function runClaudeAgentLoop(
     } catch (apiError: any) {
       console.warn('Live Claude API call failed, falling back to local clinical agent:', apiError.message);
       // Fallback gracefully so patient never experiences a crash
-      return simulateClaudeAgentLoop(userText, context, languagePreference, safety.triageScore, safety.urgency);
+      return simulateClaudeAgentLoop(userText, context, languagePreference, safety.triageScore, safety.urgency, history);
     }
   }
 
   // 3. Simulated Intelligent Local Clinical Agent (Offline / No Key Mode)
-  return simulateClaudeAgentLoop(userText, context, languagePreference, safety.triageScore, safety.urgency);
+  return simulateClaudeAgentLoop(userText, context, languagePreference, safety.triageScore, safety.urgency, history);
 }
 
 /**
@@ -339,10 +339,61 @@ export async function simulateClaudeAgentLoop(
   context: ToolExecutionContext,
   languagePreference: 'swa_eng' | 'swa' | 'eng',
   triageScore: number,
-  urgency: 'Routine' | 'Standard' | 'Urgent' | 'Emergency'
+  urgency: 'Routine' | 'Standard' | 'Urgent' | 'Emergency',
+  history: Array<{ sender: string; text: string }> = []
 ): Promise<ClaudeAgentLoopResult> {
-  const pathway = determineCarePathway(userText);
+  const intake = analyzeClinicalIntake(userText, history, languagePreference);
+  const pathway = intake.pathway;
+  const specialist = intake.specialist;
   const executedTools: ToolExecutionResult[] = [];
+
+  // If patient needs clarification, do NOT assign a doctor or slot
+  if (intake.needsClarification) {
+    const careRequestRes = await executeAfyaConnectTool(
+      'create_care_request',
+      {
+        patientName: context.patientName || 'Jane M.',
+        verbatimTranscript: userText,
+        chiefConcern: userText.length > 35 ? userText.slice(0, 35) + '...' : userText,
+        triageScore: pathway.triageScore,
+        urgency: pathway.urgency,
+        facilityId: specialist.facilityId || 'f-agakhan',
+        preferredSlot: 'Pending Triage',
+      },
+      context
+    );
+    executedTools.push({
+      toolName: 'analyze_clinical_intake',
+      success: true,
+      data: { needsClarification: true, pathway: pathway.department },
+    });
+    executedTools.push(careRequestRes);
+
+    const feedbackCard: FeedbackCardData = {
+      type: 'request_received',
+      department: pathway.department,
+      requestedTime: languagePreference === 'eng' ? 'Pending triage details' : languagePreference === 'swa' ? 'Inasubiri maelezo' : 'Pending triage details',
+      statusText: languagePreference === 'eng' ? 'Assessing symptoms' : languagePreference === 'swa' ? 'Inakaguliwa' : 'Checking symptoms',
+      facilityName: 'AfyaConnect Clinical Gateway',
+      requestId: careRequestRes.createdCareRequest?.id || `#${Math.floor(10487 + Math.random() * 500)}`,
+    };
+
+    return {
+      finalText: intake.clarificationMessage,
+      executedTools,
+      createdCareRequest: careRequestRes.createdCareRequest,
+      feedbackCard,
+      isEmergency: false,
+      triageScore: pathway.triageScore,
+      urgency: pathway.urgency,
+      dialectTag: languagePreference === 'eng' ? 'ENGLISH' : languagePreference === 'swa' ? 'KISWAHILI PEKEE' : 'SWA + ENG CODE-SWITCH',
+    };
+  }
+
+  // Otherwise, clinical intake is complete -> route to specific specialist
+  const targetFacilityId = specialist.facilityId || 'f-agakhan';
+  const leadDoctor = specialist.doctorName || 'Dr. Wanjiku Kamau';
+  const specialtyName = specialist.specialist;
 
   // 1. Tool Call: find_nearby_facilities
   const findToolRes = await executeAfyaConnectTool(
@@ -352,14 +403,14 @@ export async function simulateClaudeAgentLoop(
   );
   executedTools.push(findToolRes);
 
-  const facilities = findToolRes.data.facilities || [];
-  const primaryFacility = facilities[0] || {
+  const facilities = findToolRes.data?.facilities || [];
+  const primaryFacility = facilities.find((f: any) => f.id === targetFacilityId) || facilities[0] || {
     id: 'f-agakhan',
     name: 'Aga Khan Univ. Hospital',
     subCounty: 'Parklands',
     distanceKm: 1.4,
     driveTime: '~6 min drive',
-    leadDoctor: 'Dr. Wanjiku Kamau',
+    leadDoctor,
     earliestSlot: 'Leo 3:30 PM',
   };
 
@@ -372,8 +423,8 @@ export async function simulateClaudeAgentLoop(
   executedTools.push(availToolRes);
 
   const availability = availToolRes.data;
-  const leadDoctor = availability?.availableDoctors?.[0]?.doctorName || primaryFacility.leadDoctor;
-  const earliestSlot = availability?.earliestAvailableSlot || primaryFacility.earliestSlot;
+  const matchedDoc = availability?.availableDoctors?.find((d: any) => d.doctorName === leadDoctor);
+  const earliestSlot = matchedDoc?.slots?.[0] || availability?.earliestAvailableSlot || primaryFacility.earliestSlot || 'Leo 3:30 PM';
 
   // 3. Tool Call: create_care_request
   const careRequestRes = await executeAfyaConnectTool(
@@ -408,13 +459,13 @@ export async function simulateClaudeAgentLoop(
     formattedDate = isTomorrow ? 'Tomorrow, Tuesday 24 Sept' : 'Today, Sunday 20 Sept';
     formattedTime = isTomorrow ? `Tomorrow at ${cleanSlot}` : `Today at ${cleanSlot}`;
     statusText = 'Verified Slot';
-    finalText = `I have received your request regarding ${pathway.department.toLowerCase()}. ${pathway.explanationEnglish} I found ${facilities.length} healthcare facilities near you in ${primaryFacility.subCounty} with consultation slots available. Dr. ${leadDoctor} at ${primaryFacility.name} is available ${formattedTime}. Would you like to book this appointment?`;
+    finalText = `Based on your symptoms, I recommend a consultation with ${specialtyName} (${leadDoctor}) in the ${pathway.department} department at ${primaryFacility.name}. ${pathway.explanationEnglish} A verified slot is available ${formattedTime}. Would you like to book this appointment?`;
   } else if (languagePreference === 'swa') {
     dialectTag = 'KISWAHILI PEKEE';
     formattedDate = isTomorrow ? 'Kesho, Jumanne 24 Sept' : 'Leo, Jumapili 20 Sept';
     formattedTime = isTomorrow ? `Kesho ${cleanSlot}` : `Leo ${cleanSlot}`;
     statusText = 'Nafasi Imethibitishwa';
-    finalText = `Nimekuelewa vizuri kuhusu ${pathway.department}. ${pathway.explanationSwahili} Nimepata vituo ${facilities.length} vilivyo karibu nawe hapa ${primaryFacility.subCounty} vyenye nafasi ya daktari ${leadDoctor} (${formattedTime}). Je, ungependa kuthibitisha miadi hii katika hospitali ya ${primaryFacility.name}?`;
+    finalText = `Kulingana na maelezo ya dalili zako, ninapendekeza mashauriano na ${specialtyName} (${leadDoctor}) katika kitengo cha ${pathway.department} hapa ${primaryFacility.name}. ${pathway.explanationSwahili} Nafasi ya daktari inapatikana ${formattedTime}. Je, ungependa kuthibitisha miadi hii?`;
   } else {
     // Kenyan Code-Switching (Sheng / Swahili + English)
     dialectTag = 'SWA + ENG CODE-SWITCH';
@@ -423,9 +474,9 @@ export async function simulateClaudeAgentLoop(
     statusText = 'Verified Slot';
     const userHasSwahili = /nimekuwa|nahisi|tumbo|kichwa|daktari|kesho|leo|homa|mtoto|masikio|jino|ngozi|kuona/i.test(lower);
     if (!userHasSwahili) {
-      finalText = `Pole sana, I understand what you are experiencing. ${pathway.explanationEnglish} I found ${facilities.length} nearby healthcare centers in ${primaryFacility.subCounty}. Dr. ${leadDoctor} at ${primaryFacility.name} has an open slot ${formattedTime}. Would you like to book this consultation?`;
+      finalText = `Based on your description, I recommend consulting with ${specialtyName} (${leadDoctor}) in ${pathway.department} at ${primaryFacility.name}. ${pathway.explanationEnglish} A slot is available ${formattedTime}. Would you like to book this appointment?`;
     } else {
-      finalText = `Pole sana, nimekuelewa vizuri: ${pathway.explanationSwahili} Nimepata vituo ${facilities.length} vya afya vilivyo karibu. Daktari ${leadDoctor} katika ${primaryFacility.name} ana nafasi ${formattedTime}. Je, ungependa kuthibitisha miadi hii?`;
+      finalText = `Pole sana, nimekuelewa vizuri: ${pathway.explanationSwahili} Ninapendekeza ${specialtyName} (${leadDoctor}) katika hospitali ya ${primaryFacility.name}. Kuna nafasi ${formattedTime}. Je, ungependa kuthibitisha miadi hii?`;
     }
   }
 

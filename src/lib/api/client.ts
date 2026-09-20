@@ -26,6 +26,7 @@ export interface BackendInteractResponse {
     subCounty: string;
   }>;
   careRequest?: any;
+  options?: string[];
 }
 
 export interface BackendBookAppointmentRequest {
