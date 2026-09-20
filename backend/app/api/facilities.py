@@ -27,11 +27,20 @@ def list_facilities(
                 "initials": d.initials,
                 "specialty": d.specialty,
                 "qualification": d.qualification,
+                "experience": "5+ years",
                 "room": d.roomNumber,
                 "isOnDuty": d.isOnDuty,
+                "freeSlotsCount": 2,
+                "slots": [
+                    {"id": f"{d.id}-slot-1", "time": "Leo 3:30 PM", "isAvailable": True, "label": "Leo 3:30 PM", "remainingCount": 2},
+                    {"id": f"{d.id}-slot-2", "time": "Kesho 10:30 AM", "isAvailable": True, "label": "Kesho 10:30 AM", "remainingCount": 3},
+                    {"id": f"{d.id}-slot-3", "time": "Kesho 02:00 PM", "isAvailable": True, "label": "Kesho 02:00 PM", "remainingCount": 1},
+                ],
             }
             for d in fac.doctors
         ]
+        insurance_list = [x.strip() for x in fac.acceptsInsurance.split(",")]
+        dept_list = [d.name for d in fac.departments]
         results.append({
             "id": fac.id,
             "name": fac.name,
@@ -44,10 +53,14 @@ def list_facilities(
             "driveTime": estimate_drive_time_minutes(dist),
             "phone": fac.phone,
             "imageUrl": fac.imageUrl,
+            "mapImageUrl": fac.imageUrl,
             "isEmergencyReady": fac.isEmergencyReady,
             "isPublic": fac.isPublic,
-            "acceptsInsurance": [x.strip() for x in fac.acceptsInsurance.split(",")],
-            "departments": [d.name for d in fac.departments],
+            "queueCount": 3,
+            "acceptsInsurance": insurance_list,
+            "paymentBadges": insurance_list,
+            "departments": dept_list,
+            "services": dept_list,
             "doctors": doctors,
         })
 

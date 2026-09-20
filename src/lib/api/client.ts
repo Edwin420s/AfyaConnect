@@ -123,7 +123,55 @@ export async function fetchBackendFacilities(): Promise<Facility[] | null> {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
-    return await res.json();
+    const rawList = await res.json();
+    if (!Array.isArray(rawList)) return null;
+
+    return rawList.map((f: any) => ({
+      id: f.id,
+      name: f.name,
+      level: f.level || 'Level 4 Hospital',
+      accreditation: f.accreditation || 'SHA Verified',
+      address: f.address || 'Nairobi, Kenya',
+      subCounty: f.subCounty || 'Nairobi County',
+      distanceKm: typeof f.distanceKm === 'number' ? f.distanceKm : 2.5,
+      driveTime: f.driveTime || '10 mins',
+      imageUrl: f.imageUrl || 'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&q=80&w=400',
+      mapImageUrl: f.mapImageUrl || f.imageUrl || '',
+      phone: f.phone || '+254 20 000 0000',
+      isPublic: !!f.isPublic,
+      queueCount: f.queueCount || 3,
+      services: Array.isArray(f.services)
+        ? f.services
+        : Array.isArray(f.departments)
+        ? f.departments
+        : ['General Consultation', 'Pediatrics'],
+      paymentBadges: Array.isArray(f.paymentBadges)
+        ? f.paymentBadges
+        : Array.isArray(f.acceptsInsurance)
+        ? f.acceptsInsurance
+        : ['SHA / NHIF', 'Cash / M-PESA'],
+      doctors: Array.isArray(f.doctors)
+        ? f.doctors.map((d: any) => ({
+            id: d.id,
+            name: d.name || d.fullName || 'Medical Officer',
+            initials: d.initials || 'MO',
+            specialty: d.specialty || 'General Consultation',
+            qualification: d.qualification || 'MBChB',
+            experience: d.experience || '5+ years',
+            room: d.room || d.roomNumber || 'Room 01',
+            isOnDuty: d.isOnDuty !== false,
+            freeSlotsCount: d.freeSlotsCount || 2,
+            avatarUrl: d.avatarUrl,
+            slots: Array.isArray(d.slots) && d.slots.length > 0
+              ? d.slots
+              : [
+                  { id: `${d.id}-s1`, time: 'Leo 3:30 PM', isAvailable: true, remainingCount: 2 },
+                  { id: `${d.id}-s2`, time: 'Kesho 10:30 AM', isAvailable: true, remainingCount: 3 },
+                  { id: `${d.id}-s3`, time: 'Kesho 02:00 PM', isAvailable: true, remainingCount: 1 },
+                ],
+          }))
+        : [],
+    }));
   } catch {
     return null;
   }

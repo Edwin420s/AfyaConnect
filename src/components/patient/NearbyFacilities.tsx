@@ -34,17 +34,21 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
   ];
 
   const filteredFacilities = facilities.filter(f => {
+    const services = f.services || [];
+    const doctors = f.doctors || [];
+    const accreditation = f.accreditation || '';
+
     const matchesSearch =
-      f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.services.some(s => s.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      f.doctors.some(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      (f.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (f.address || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      services.some(s => s.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      doctors.some(d => (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (selectedCategory === 'all') return matchesSearch;
-    if (selectedCategory === 'general') return matchesSearch && f.services.includes('General Consultation');
-    if (selectedCategory === 'pediatrics') return matchesSearch && f.services.includes('Pediatrics');
-    if (selectedCategory === 'dental') return matchesSearch && f.services.includes('Dental');
-    if (selectedCategory === 'maternity') return matchesSearch && (f.accreditation.includes('Linda Mama') || f.services.includes('Maternal & Child Health'));
+    if (selectedCategory === 'general') return matchesSearch && services.includes('General Consultation');
+    if (selectedCategory === 'pediatrics') return matchesSearch && services.includes('Pediatrics');
+    if (selectedCategory === 'dental') return matchesSearch && services.includes('Dental');
+    if (selectedCategory === 'maternity') return matchesSearch && (accreditation.includes('Linda Mama') || services.includes('Maternal & Child Health'));
     return matchesSearch;
   });
 
@@ -293,7 +297,7 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
                   <span className="material-symbols-outlined text-[16px] text-primary flex-shrink-0">
                     health_and_safety
                   </span>
-                  <span className="truncate">{facility.paymentBadges.slice(0, 3).join(' • ')}</span>
+                  <span className="truncate">{(facility.paymentBadges || []).slice(0, 3).join(' • ')}</span>
                 </div>
                 <button
                   onClick={() => handleOpenBooking(facility, mainDoctor)}
