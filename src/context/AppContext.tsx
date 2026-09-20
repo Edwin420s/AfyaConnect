@@ -70,9 +70,7 @@ interface AppContextType {
   isEmergencyModalOpen: boolean;
   setIsEmergencyModalOpen: (open: boolean) => void;
 
-  // Claude AI Configuration Modal & Thinking State
-  isClaudeConfigOpen: boolean;
-  setIsClaudeConfigOpen: (open: boolean) => void;
+  // AI Processing & Thinking State
   isAiThinking: boolean;
 }
 
@@ -147,7 +145,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState<boolean>(false);
-  const [isClaudeConfigOpen, setIsClaudeConfigOpen] = useState<boolean>(false);
   const [isAiThinking, setIsAiThinking] = useState<boolean>(false);
 
   const showToast = (message: string) => {
@@ -602,8 +599,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast,
         isEmergencyModalOpen,
         setIsEmergencyModalOpen,
-        isClaudeConfigOpen,
-        setIsClaudeConfigOpen,
         isAiThinking,
       }}
     >

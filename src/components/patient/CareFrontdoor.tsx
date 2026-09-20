@@ -75,7 +75,11 @@ export const CareFrontdoor: React.FC = () => {
       const sampleSheng = '“Nimekuwa na maumivu ya tumbo for two days, na pia nahisi homa kidogo.”';
       sendMessage(sampleSheng, true);
       setIsListening(false);
-      showToast('🎙 Audio Note imeandikwa na kuchakatwa na Claude AI');
+      showToast(
+        languagePreference === 'eng'
+          ? '🎙 Audio note transcribed and processed'
+          : '🎙 Ujumbe wa sauti umenakiliwa na kuchakatwa'
+      );
     }, 2000);
   };
 

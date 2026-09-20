@@ -5,7 +5,6 @@ import { BottomNav } from './components/BottomNav';
 import { Toast } from './components/Toast';
 import { EmergencyModal } from './components/EmergencyModal';
 import { BookingSheetModal } from './components/BookingSheetModal';
-import { ClaudeConfigModal } from './components/ClaudeConfigModal';
 
 // Patient Views
 import { CareFrontdoor } from './components/patient/CareFrontdoor';
@@ -96,7 +95,6 @@ export const App: React.FC = () => {
       <Toast />
       <EmergencyModal />
       <BookingSheetModal />
-      <ClaudeConfigModal />
     </div>
   );
 };

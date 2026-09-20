@@ -9,7 +9,6 @@ export const Header: React.FC = () => {
     languagePreference,
     toggleLanguagePreference,
     setActivePatientTab,
-    setIsClaudeConfigOpen,
   } = useApp();
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
 
@@ -117,17 +116,6 @@ export const Header: React.FC = () => {
             )}
           </div>
 
-          {/* Claude AI Settings Button - Only visible for Admin; completely hidden on Patient and Clinical views so Claude runs silently in the background */}
-          {currentRole === 'admin' && (
-            <button
-              onClick={() => setIsClaudeConfigOpen(true)}
-              className="h-8 md:h-9 px-2.5 rounded-full bg-surface-container flex items-center gap-1 text-primary hover:text-primary-container active:bg-surface-container-high transition-colors shadow-xs"
-              title="Claude AI Clinical Engine Settings (Admin Only)"
-            >
-              <span className="material-symbols-outlined text-[16px] text-primary">smart_toy</span>
-              <span className="text-xs font-bold hidden md:inline">Claude AI</span>
-            </button>
-          )}
 
           {/* Bilingual Toggle Button */}
           <button

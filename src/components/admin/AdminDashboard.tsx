@@ -104,7 +104,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="font-bold text-sm text-on-surface">AI Engine & System Performance</h3>
             <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
-                <span className="font-semibold text-on-surface">Claude 3.5 Sonnet Medical Triage Gateway</span>
+                <span className="font-semibold text-on-surface">Automated Clinical Triage Gateway</span>
                 <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold">Operational (99.98%)</span>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
@@ -179,8 +179,8 @@ export const AdminDashboard: React.FC = () => {
             {[
               { time: '10:11 AM', event: 'APPOINTMENT_CONFIRMED', detail: 'Pass #AC-NBO-8492 issued to Jane M. with Dr. Kamau at Aga Khan', actor: 'Aga Khan Reception Desk' },
               { time: '10:09 AM', event: 'SLOT_PROPOSED', detail: 'Slot Kesho 10:30 AM reserved for request #10482', actor: 'HMIS Schedule System' },
-              { time: '10:07 AM', event: 'DOCTOR_CHECK', detail: 'Dr. Kamau duty calendar verified for OPD Suite 04', actor: 'Claude Tool Agent' },
-              { time: '10:04 AM', event: 'TRIAGE_COMPLETED', detail: 'Patient voice note categorized: Abdominal pain x 48h, Level 4 urgency', actor: 'Claude Clinical AI' },
+              { time: '10:07 AM', event: 'DOCTOR_CHECK', detail: 'Dr. Kamau duty calendar verified for OPD Suite 04', actor: 'Clinical Tool Agent' },
+              { time: '10:04 AM', event: 'TRIAGE_COMPLETED', detail: 'Patient voice note categorized: Abdominal pain x 48h, Level 4 urgency', actor: 'Clinical AI Engine' },
               { time: '10:02 AM', event: 'REQUEST_CREATED', detail: 'Inbound chat from Westlands (+254 712 345 678)', actor: 'AfyaConnect Frontdoor' },
             ].map((log, i) => (
               <div key={i} className="p-2.5 rounded-lg bg-surface-container-low border border-surface-container-high/40 flex items-start justify-between gap-2">

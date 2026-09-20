@@ -82,7 +82,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({ onOpenDeta
             <span className="relative inline-flex w-2 h-2 rounded-full bg-primary"></span>
           </div>
           <span className="text-xs text-primary truncate font-bold">
-            Live AI Intake: Claude triage engine online
+            Live AI Intake: Clinical triage engine online
           </span>
         </div>
         <div className="flex items-center gap-1 bg-surface-container-lowest px-2.5 py-0.5 rounded-full shadow-xs border border-surface-container-high flex-shrink-0">
@@ -396,7 +396,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({ onOpenDeta
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-[16px] text-primary">psychology</span>
-                    <span className="text-xs font-bold text-primary">Claude Clinical Summary</span>
+                    <span className="text-xs font-bold text-primary">Clinical AI Summary</span>
                   </div>
                   <span className="text-xs font-bold text-tertiary-container">
                     Triage Score: {req.triageScore}/5 ({req.urgency})
