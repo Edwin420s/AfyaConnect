@@ -168,3 +168,301 @@ def determine_care_pathway(text: str) -> Dict[str, Any]:
         "explanationSwahili": "Uchunguzi wa jumla (General Consultation) na daktari wa zamu unapendekezwa kuchunguza dalili zako kwa makini.",
         "explanationEnglish": "General outpatient consultation with the duty medical officer is recommended to thoroughly evaluate your condition.",
     }
+
+
+SPECIALIST_ROSTER = {
+    "PED": {
+        "specialist": "Pediatrician / Child Health Clinic",
+        "doctorName": "Dr. Achieng",
+        "department": "Pediatrics & Child Health",
+        "facilityId": "f-agakhan",
+    },
+    "ENT": {
+        "specialist": "ENT Specialist / Otorhinolaryngologist",
+        "doctorName": "Dr. Achieng",
+        "department": "Ear, Nose & Throat (ENT)",
+        "facilityId": "f-agakhan",
+    },
+    "DERM": {
+        "specialist": "Consultant Dermatologist",
+        "doctorName": "Dr. Mwangi",
+        "department": "Dermatology",
+        "facilityId": "f-mpshah",
+    },
+    "DENT": {
+        "specialist": "Dental Surgeon / Dentist",
+        "doctorName": "Dr. Kibet",
+        "department": "Dental Surgery & Oral Health",
+        "facilityId": "f-avenue",
+    },
+    "EYE": {
+        "specialist": "Consultant Ophthalmologist",
+        "doctorName": "Dr. Omondi",
+        "department": "Ophthalmology (Eye Care)",
+        "facilityId": "f-agakhan",
+    },
+    "ORTHO": {
+        "specialist": "Orthopedic Surgeon",
+        "doctorName": "Dr. Wanjiku Kamau",
+        "department": "Orthopedics & Musculoskeletal",
+        "facilityId": "f-agakhan",
+    },
+    "MAT": {
+        "specialist": "Obstetrician / Linda Mama Clinic",
+        "doctorName": "Dr. Wanjiku Kamau",
+        "department": "Maternity & Reproductive Health (Linda Mama)",
+        "facilityId": "f-westlands",
+    },
+    "GASTRO": {
+        "specialist": "Gastroenterologist & Internal Medicine",
+        "doctorName": "Dr. Wanjiku Kamau",
+        "department": "Gastroenterology & Internal Medicine",
+        "facilityId": "f-agakhan",
+    },
+    "CARD": {
+        "specialist": "Consultant Cardiologist",
+        "doctorName": "Dr. Wanjiku Kamau",
+        "department": "Cardiology & Cardiovascular",
+        "facilityId": "f-agakhan",
+    },
+    "RESP": {
+        "specialist": "Pulmonologist & Chest Physician",
+        "doctorName": "Dr. Achieng",
+        "department": "Pulmonology & Respiratory",
+        "facilityId": "f-agakhan",
+    },
+    "MNT": {
+        "specialist": "Clinical Psychologist / Counselor",
+        "doctorName": "Dr. Omondi",
+        "department": "Mental Health & Wellness",
+        "facilityId": "f-agakhan",
+    },
+    "OPD": {
+        "specialist": "General Practitioner / Medical Officer",
+        "doctorName": "Dr. Wanjiku Kamau",
+        "department": "General Consultation (OPD)",
+        "facilityId": "f-agakhan",
+    },
+}
+
+
+def analyze_clinical_intake(
+    patient_message: str,
+    history: Optional[List[Dict[str, Any]]] = None,
+    language_preference: str = "swa_eng",
+) -> Dict[str, Any]:
+    """
+    Intelligently evaluates whether the patient has provided enough clinical data
+    (symptoms, location, duration, and patient context like adult vs child)
+    before recommending a specific specialist or proposing an appointment.
+    Prevents premature booking on single-word or vague initial messages.
+    """
+    history = history or []
+    patient_turns = [
+        h.get("text", "").strip()
+        for h in history
+        if h.get("sender") in ["patient", "user"] and h.get("text", "").strip()
+    ]
+    all_patient_text = " ".join(patient_turns + [patient_message.strip()]).lower()
+    curr_text = patient_message.strip().lower()
+    words = curr_text.split()
+
+    # 1. Pure Greetings
+    greetings = [
+        "hi", "hello", "habari", "sasa", "mambo", "niaje", "hey", "jambo",
+        "good morning", "good afternoon", "good evening", "how are you", "hujambo",
+        "salama", "oya", "vipi", "morning", "afternoon"
+    ]
+    is_greeting = curr_text in greetings or (len(words) <= 2 and any(g == curr_text for g in greetings))
+
+    # 2. Vague 1-3 word queries without clinical context
+    vague_phrases = [
+        "homa", "fever", "pain", "maumivu", "kichwa", "headache", "sick", "ill",
+        "mgonjwa", "daktari", "doctor", "nisaidie", "help", "need a doctor",
+        "nahitaji daktari", "nataka daktari", "tumbo", "stomach", "kuumwa",
+        "hospitali", "clinic", "treatment", "matibabu"
+    ]
+    is_vague_short = (len(words) <= 3) and any(
+        curr_text == vp or curr_text.startswith(vp) or curr_text.endswith(vp)
+        for vp in vague_phrases
+    )
+
+    # 3. Clinical details present in combined history
+    has_duration = any(
+        w in all_patient_text
+        for w in [
+            "day", "days", "siku", "hour", "hours", "masaa", "week", "weeks", "wiki",
+            "since", "tangu", "yesterday", "jana", "leo", "today", "night", "usiku",
+            "asubuhi", "morning", "month", "miezi", "ongoing", "kwa siku", "tangu jana",
+            "for two", "for 2", "for 3", "for a week"
+        ]
+    )
+
+    has_specific_specialty = any(
+        w in all_patient_text
+        for w in [
+            "mtoto", "child", "children", "baby", "infant", "toddler", "mwanangu", "kid", "kids", "pediatric",
+            "meno", "jino", "tooth", "teeth", "dental", "dentist", "gums", "toothache",
+            "ngozi", "skin", "rash", "vipele", "upele", "eczema", "acne", "itching", "kuwasha",
+            "macho", "jicho", "eye", "eyes", "vision", "blurry", "cataract", "redness", "kuona",
+            "ankle", "knee", "joint", "bone", "fracture", "sprain", "twist", "goti", "mguu", "mgongo", "kiuno", "mfupa",
+            "masikio", "ear", "ears", "hearing", "koo", "throat", "tonsil", "tonsils", "pua", "sinus",
+            "mimba", "ujauzito", "pregnant", "pregnancy", "uzazi", "linda mama", "antenatal"
+        ]
+    )
+
+    has_detailed_explanation = len(words) >= 6 and (has_duration or any(
+        s in curr_text for s in [
+            "tumbo", "stomach", "fever", "homa", "migraine", "dizziness", "vomiting", "cough",
+            "breath", "pain", "swollen", "injured", "headache", "kichwa"
+        ]
+    ))
+
+    # Evaluate if clarification is needed
+    if is_greeting or (is_vague_short and not has_duration and not has_specific_specialty):
+        needs_clarification = True
+    elif has_specific_specialty or has_detailed_explanation or (has_duration and len(words) >= 4):
+        needs_clarification = False
+    elif len(patient_turns) >= 1 and (has_duration or has_specific_specialty or len(words) >= 3):
+        needs_clarification = False
+    else:
+        needs_clarification = True
+
+    # Generate tailored clarifying intake question
+    if needs_clarification:
+        symptom_focus = None
+        if "kichwa" in curr_text or "headache" in curr_text or "migraine" in curr_text:
+            symptom_focus = "headache"
+        elif "tumbo" in curr_text or "stomach" in curr_text:
+            symptom_focus = "stomach"
+        elif "homa" in curr_text or "fever" in curr_text:
+            symptom_focus = "fever"
+        elif "ngozi" in curr_text or "skin" in curr_text:
+            symptom_focus = "skin"
+
+        if language_preference == "eng":
+            if symptom_focus == "headache":
+                clarification_message = (
+                    "I understand you are experiencing a headache. To connect you with the right specialist and check doctor availability:\n"
+                    "1. How long has the headache lasted, and is it mild, moderate, or severe?\n"
+                    "2. Are you experiencing any other symptoms like fever, dizziness, or nausea?\n"
+                    "3. Is this consultation for yourself (adult) or a child?"
+                )
+            elif symptom_focus == "stomach":
+                clarification_message = (
+                    "I understand you are experiencing stomach discomfort. To connect you with the right specialist:\n"
+                    "1. How long have you had this stomach pain (e.g. today, 2 days)?\n"
+                    "2. Are you experiencing any nausea, vomiting, fever, or diarrhea?\n"
+                    "3. Is this consultation for an adult or a child?"
+                )
+            elif symptom_focus == "fever":
+                clarification_message = (
+                    "I understand you have a fever. To help evaluate your condition:\n"
+                    "1. How high is the fever, and how long has it lasted?\n"
+                    "2. Is this consultation for an adult or a child?\n"
+                    "3. Are there any other symptoms like chills, body weakness, or rash?"
+                )
+            else:
+                clarification_message = (
+                    "Hello! Welcome to AfyaConnect. To help you connect with the right specialist (such as Pediatrics for children, ENT for ear/throat, Dermatology for skin, Dental for teeth, or Internal Medicine) and check real doctor availability, could you please tell me:\n"
+                    "1. What specific symptoms are you experiencing, and in which part of your body?\n"
+                    "2. How long have you had them (e.g. today, 2 days, a week)?\n"
+                    "3. Is this consultation for an adult or a child?"
+                )
+            clarification_options = [
+                "👶 It's for a child (Fever / Cough)",
+                "🩺 Severe stomach pain (2 days)",
+                "🦷 Toothache / Dental issue",
+                "👁 Eye redness or blurry vision",
+                "🩹 Skin rash or itching",
+                "🦴 Joint, knee or back pain",
+            ]
+        elif language_preference == "swa":
+            if symptom_focus == "headache":
+                clarification_message = (
+                    "Pole sana kwa maumivu ya kichwa. Ili kukuunganisha na daktari sahihi na kuangalia nafasi:\n"
+                    "1. Maumivu haya yameanza lini, na ni ya kawaida au makali sana?\n"
+                    "2. Je, una dalili zingine kama homa, kizunguzungu, au kichefuchefu?\n"
+                    "3. Je, mashauriano haya ni ya mtu mzima au mtoto?"
+                )
+            elif symptom_focus == "stomach":
+                clarification_message = (
+                    "Pole sana kwa maumivu ya tumbo. Ili kupata daktari sahihi anayefaa:\n"
+                    "1. Maumivu haya ya tumbo yameanza lini (kwa mfano leo, siku 2)?\n"
+                    "2. Je, unahisi kichefuchefu, kutapika, homa au kuendesha?\n"
+                    "3. Je, ni yako au ya mtoto?"
+                )
+            elif symptom_focus == "fever":
+                clarification_message = (
+                    "Pole sana kwa homa. Ili kusaidia kutathmini hali yako:\n"
+                    "1. Homa hii imeanza lini, na ni kali kiasi gani?\n"
+                    "2. Je, mashauriano haya ni ya mtu mzima au mtoto?\n"
+                    "3. Je, una dalili zingine kama kutetemeka, kuishiwa nguvu, au upele?"
+                )
+            else:
+                clarification_message = (
+                    "Jambo! Karibu AfyaConnect. Ili kukuunganisha na daktari bingwa anayefaa (kama vile Daktari wa Watoto, Masikio na Koo, Ngozi, Meno, au Uchunguzi wa Jumla) na kuangalia nafasi za miadi:\n"
+                    "1. Je, unapata dalili zipi hasa, na katika sehemu gani ya mwili?\n"
+                    "2. Zimeanza lini (kwa mfano leo, siku 2, au wiki)?\n"
+                    "3. Je, mashauriano haya ni ya mtu mzima au mtoto?"
+                )
+            clarification_options = [
+                "👶 Ni ya mtoto (Homa / Kikohozi)",
+                "🩺 Maumivu ya tumbo (Siku 2)",
+                "🦷 Maumivu ya jino / Meno",
+                "👁 Macho mekundu / Uoni hafifu",
+                "🩹 Upele au kuwashwa ngozi",
+                "🦴 Maumivu ya viungo au mgongo",
+            ]
+        else:
+            # Sheng / Code-switch
+            if symptom_focus == "headache":
+                clarification_message = (
+                    "Pole sana kwa hiyo headache. Before tuchague daktari na slot:\n"
+                    "1. Imeanza lini (duration) na ni kali aje?\n"
+                    "2. Kuna dalili zingine kama fever, kizunguzungu ama nausea?\n"
+                    "3. Consultation ni ya mtu mzima ama mtoi/child?"
+                )
+            elif symptom_focus == "stomach":
+                clarification_message = (
+                    "Pole sana kwa maumivu ya tumbo. Before tu-book slot:\n"
+                    "1. Tumbo imeanza kuuma lini (e.g. leo, 2 days)?\n"
+                    "2. Kuna kutapika, diarrhea, au homa?\n"
+                    "3. Ni ya mtu mzima ama mtoto?"
+                )
+            elif symptom_focus == "fever":
+                clarification_message = (
+                    "Pole sana kwa hiyo homa. Before tu-route kwa doctor:\n"
+                    "1. Homa imeanza lini na ni kali aje?\n"
+                    "2. Ni ya mtu mzima ama mtoi/child?\n"
+                    "3. Kuna baridi kali, kuishiwa nguvu ama vipele?"
+                )
+            else:
+                clarification_message = (
+                    "Niaje! Welcome to AfyaConnect. To help you connect na specialist anayefaa (kama Daktari wa Watoto, ENT, Ngozi, Meno, ama General OPD):\n"
+                    "1. Ni dalili gani haswa unahisi na ziko sehemu gani ya mwili?\n"
+                    "2. Zimeanza lini (duration - leo, siku 2, ama wiki)?\n"
+                    "3. Consultation ni ya mtu mzima ama mtoi/child?"
+                )
+            clarification_options = [
+                "👶 Ni ya mtoi (Homa kali)",
+                "🩺 Maumivu ya tumbo for 2 days",
+                "🦷 Jino linaniuma sana",
+                "👁 Macho mekundu / Blurry vision",
+                "🩹 Vipele na allergy kwa ngozi",
+                "🦴 Nimeumia goti / Mgongo unauma",
+            ]
+    else:
+        clarification_message = ""
+        clarification_options = []
+
+    pathway = determine_care_pathway(all_patient_text)
+    specialist_info = SPECIALIST_ROSTER.get(pathway["departmentCode"], SPECIALIST_ROSTER["OPD"])
+
+    return {
+        "needsClarification": needs_clarification,
+        "clarificationMessage": clarification_message,
+        "clarificationOptions": clarification_options,
+        "pathway": pathway,
+        "specialist": specialist_info,
+    }
