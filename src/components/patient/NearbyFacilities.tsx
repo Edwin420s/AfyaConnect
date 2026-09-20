@@ -14,6 +14,8 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
     toggleGps,
     showToast,
     setActivePatientTab,
+    t,
+    languagePreference,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,11 +28,11 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
   });
 
   const categories = [
-    { id: 'all', label: 'All Facilities (14)', icon: 'domain' },
-    { id: 'general', label: 'General Consultation', icon: 'stethoscope' },
-    { id: 'pediatrics', label: 'Pediatrics', icon: 'child_care' },
-    { id: 'dental', label: 'Dental', icon: 'dentistry' },
-    { id: 'maternity', label: 'Maternity / Linda Mama', icon: 'pregnant_woman' },
+    { id: 'all', label: t.allFacilities, icon: 'domain' },
+    { id: 'general', label: t.generalConsultation, icon: 'stethoscope' },
+    { id: 'pediatrics', label: t.pediatrics, icon: 'child_care' },
+    { id: 'dental', label: t.dental, icon: 'dentistry' },
+    { id: 'maternity', label: t.maternity, icon: 'pregnant_woman' },
   ];
 
   const filteredFacilities = facilities.filter(f => {
@@ -54,11 +56,11 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
 
   const handleSlotSelect = (facilityId: string, slotTime: string) => {
     setSelectedSlotMap(prev => ({ ...prev, [facilityId]: slotTime }));
-    showToast(`Slot imechaguliwa: ${slotTime}`);
+    showToast(languagePreference === 'eng' ? `Slot selected: ${slotTime}` : `Slot imechaguliwa: ${slotTime}`);
   };
 
   const handleOpenBooking = (facility: typeof facilities[0], doctor: typeof facilities[0]['doctors'][0]) => {
-    const chosenSlot = selectedSlotMap[facility.id] || 'Leo 3:30 PM';
+    const chosenSlot = selectedSlotMap[facility.id] || (languagePreference === 'eng' ? 'Today 3:30 PM' : 'Leo 3:30 PM');
     selectSlotForBooking(facility.name, doctor.name, chosenSlot, facility.id);
   };
 
@@ -71,14 +73,14 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          <span>Rudi kwenye Mazungumzo (Back to Triage)</span>
+          <span>{t.backToTriage}</span>
         </button>
         <button
           onClick={() => setActivePatientTab('miadi')}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-primary text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
         >
           <span className="material-symbols-outlined text-[18px]">calendar_month</span>
-          <span>Miadi Yangu (Passes)</span>
+          <span>{t.myPasses}</span>
         </button>
       </div>
 
@@ -89,7 +91,7 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
             <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
               near_me
             </span>
-            <h2 className="font-bold text-base text-on-surface truncate">Vituo Vilivyo Karibu</h2>
+            <h2 className="font-bold text-base text-on-surface truncate">{t.facilitiesTitle}</h2>
           </div>
           <button
             onClick={toggleGps}
@@ -101,7 +103,7 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
         </div>
 
         <p className="text-xs text-on-surface-variant mb-2.5">
-          Kupata vituo vya afya vilivyo tayari kuhudumia na madaktari wa zamu.
+          {t.facilitiesSubtitle}
         </p>
 
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-container-low mb-3 border border-surface-container-high/40">
@@ -109,14 +111,20 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
           <div className="flex flex-col min-w-0 flex-1">
             <span className="text-xs font-semibold text-on-surface truncate">Westlands & Parklands Sub-County</span>
             <span className="text-[11px] text-on-surface-variant truncate">
-              {isGpsActive ? 'Eneo limetambuliwa kiotomatiki • 3.2km radius' : 'Eneo limeteuliwa kwa mkono'}
+              {isGpsActive
+                ? languagePreference === 'eng'
+                  ? 'Auto-detected location • 3.2km radius'
+                  : 'Eneo limetambuliwa kiotomatiki • 3.2km radius'
+                : languagePreference === 'eng'
+                ? 'Manual location selected'
+                : 'Eneo limeteuliwa kwa mkono'}
             </span>
           </div>
           <button
             onClick={toggleGps}
             className="px-2.5 py-1 rounded bg-surface-container text-primary text-xs font-bold hover:bg-surface-variant active:scale-95 transition-all shadow-xs"
           >
-            Badili
+            {languagePreference === 'eng' ? 'Change' : 'Badili'}
           </button>
         </div>
 
@@ -129,7 +137,7 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tafuta hospitali, daktari au huduma..."
+            placeholder={t.searchPlaceholder}
             className="w-full h-11 pl-10 pr-10 rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline text-xs focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all border border-surface-container-high/50"
           />
           <button
@@ -178,10 +186,10 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
         <div className="relative z-10 flex items-center justify-between w-full">
           <div className="flex items-center gap-1.5 text-inverse-on-surface">
             <span className="material-symbols-outlined text-[18px] text-primary-fixed">map</span>
-            <span className="text-xs font-bold">Onyesha kwenye Ramani ya Mtaa (Nairobi Westlands)</span>
+            <span className="text-xs font-bold">{t.mapTitle}</span>
           </div>
           <span className="px-2.5 py-0.5 rounded-full bg-surface-container-lowest/90 text-on-surface text-xs font-bold shadow-sm">
-            Tazama Ramani →
+            {t.viewMap}
           </span>
         </div>
       </div>
@@ -196,7 +204,7 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
             freeSlotsCount: 2,
             slots: [],
           };
-          const activeSlot = selectedSlotMap[facility.id] || (mainDoctor.slots[0]?.time || 'Leo 3:30 PM');
+          const activeSlot = selectedSlotMap[facility.id] || (mainDoctor.slots[0]?.time || (languagePreference === 'eng' ? 'Today 3:30 PM' : 'Leo 3:30 PM'));
 
           return (
             <div
@@ -240,15 +248,15 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
                 </div>
                 <div className="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-lowest text-tertiary text-xs font-semibold shadow-xs">
                   <span className="material-symbols-outlined text-[14px] text-tertiary">schedule</span>
-                  <span>Foleni: {facility.queueCount}</span>
+                  <span>{t.queue} {facility.queueCount}</span>
                 </div>
               </div>
 
               {/* Available Slots Row */}
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-1.5 text-xs">
-                  <span className="text-on-surface-variant font-medium">Nafasi za Leo & Kesho (Available Slots):</span>
-                  <span className="text-primary font-bold">Chagua Moja</span>
+                  <span className="text-on-surface-variant font-medium">{t.availableSlots}</span>
+                  <span className="text-primary font-bold">{t.selectSlot}</span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-1.5">
@@ -267,25 +275,29 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
                         >
                           <span className="leading-tight truncate">{slot.time}</span>
                           <span className="text-[9px] opacity-80">
-                            {slot.remainingCount ? `${slot.remainingCount} zimebaki` : 'Nafasi ipo'}
+                            {slot.remainingCount
+                              ? languagePreference === 'eng'
+                                ? `${slot.remainingCount} left`
+                                : `${slot.remainingCount} zimebaki`
+                              : t.slotFree}
                           </span>
                         </button>
                       );
                     })
                   ) : (
                     <button
-                      onClick={() => handleSlotSelect(facility.id, 'Kesho 08:30 AM')}
+                      onClick={() => handleSlotSelect(facility.id, languagePreference === 'eng' ? 'Tomorrow 08:30 AM' : 'Kesho 08:30 AM')}
                       className={`col-span-3 h-11 px-3 rounded-lg text-xs flex items-center justify-between transition-all active:scale-95 ${
-                        activeSlot === 'Kesho 08:30 AM'
+                        activeSlot.includes('08:30')
                           ? 'bg-primary text-on-primary font-bold shadow-sm'
                           : 'bg-surface-container text-on-surface hover:bg-surface-container-high'
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="material-symbols-outlined text-[18px]">alarm</span>
-                        <span>Kesho 08:30 AM (Digital Walk-in Pass)</span>
+                        <span>{languagePreference === 'eng' ? 'Tomorrow 08:30 AM (Digital Walk-in Pass)' : 'Kesho 08:30 AM (Digital Walk-in Pass)'}</span>
                       </div>
-                      <span className="font-bold">Bure / Free</span>
+                      <span className="font-bold">{t.slotFree}</span>
                     </button>
                   )}
                 </div>
@@ -303,7 +315,7 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
                   onClick={() => handleOpenBooking(facility, mainDoctor)}
                   className="h-10 px-4 rounded-lg bg-primary text-on-primary text-xs font-bold shadow-sm active:scale-95 hover:bg-primary-container transition-all flex items-center gap-1.5 flex-shrink-0"
                 >
-                  <span>Chagua Slot Hii</span>
+                  <span>{t.selectSlot}</span>
                   <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                 </button>
               </div>
@@ -318,9 +330,9 @@ export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) =>
           <span className="material-symbols-outlined text-[22px]">verified</span>
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="text-xs font-bold text-on-surface">3 vituo vina madaktari tayari</span>
+          <span className="text-xs font-bold text-on-surface">{t.readyDoctorsCount}</span>
           <p className="text-[11px] text-on-surface-variant leading-normal">
-            You choose the facility you trust best. All verified under Kenyan Ministry of Health & SHA guidelines.
+            {t.readyDoctorsDesc}
           </p>
         </div>
       </div>

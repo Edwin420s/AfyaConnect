@@ -339,6 +339,25 @@ def orchestrate_patient_turn(
         for f in nearby[:3]
     ]
 
+    if language_preference == "eng":
+        response_options = [
+            f"Confirm Slot: {lead_doc} • {time_label}",
+            "📍 Check Nearby Facilities",
+            "🩺 I need a doctor today",
+        ]
+    elif language_preference == "swa":
+        response_options = [
+            f"Thibitisha: {lead_doc} • {time_label}",
+            "📍 Tazama Vituo Vilivyo Karibu",
+            "🩺 Nahitaji daktari leo",
+        ]
+    else:
+        response_options = [
+            f"Confirm Slot: {lead_doc} • {time_label}",
+            "📍 Ona Vituo / Other Options",
+            "🩺 Nahitaji daktari leo",
+        ]
+
     return {
         "text": ai_text,
         "responseMessage": ai_text,
@@ -352,11 +371,7 @@ def orchestrate_patient_turn(
         "nearbyFacilities": nearby_options,
         "careRequestId": care_request.id,
         "referenceNumber": care_request.referenceNumber,
-        "options": [
-            f"Confirm Slot: {lead_doc} • {earliest_slot}",
-            "📍 Ona Vituo / Other Options",
-            "🩺 Nahitaji daktari leo",
-        ],
+        "options": response_options,
         "createdCareRequest": {
             "id": care_request.id,
             "referenceNumber": care_request.referenceNumber,

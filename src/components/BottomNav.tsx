@@ -6,7 +6,7 @@ interface BottomNavProps {
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({ onTabSelect }) => {
-  const { currentRole, activePatientTab, setActivePatientTab, setCurrentRole } = useApp();
+  const { currentRole, activePatientTab, setActivePatientTab, setCurrentRole, t } = useApp();
 
   const handleTabClick = (tab: 'triage' | 'vituo' | 'miadi' | 'hospital') => {
     if (onTabSelect) {
@@ -23,10 +23,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onTabSelect }) => {
   };
 
   const navItems: { id: 'triage' | 'vituo' | 'miadi' | 'hospital'; label: string; icon: string }[] = [
-    { id: 'triage', label: 'Triage AI', icon: 'forum' },
-    { id: 'vituo', label: 'Vituo', icon: 'local_hospital' },
-    { id: 'miadi', label: 'Miadi', icon: 'calendar_month' },
-    { id: 'hospital', label: 'Hospital', icon: 'emergency_heat' },
+    { id: 'triage', label: t.navTriage, icon: 'forum' },
+    { id: 'vituo', label: t.navFacilities, icon: 'local_hospital' },
+    { id: 'miadi', label: t.navAppointments, icon: 'calendar_month' },
+    { id: 'hospital', label: t.navHospital, icon: 'emergency_heat' },
   ];
 
   return (

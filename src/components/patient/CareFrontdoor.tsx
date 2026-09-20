@@ -8,6 +8,7 @@ export const CareFrontdoor: React.FC = () => {
     sendMessage,
     languagePreference,
     toggleLanguagePreference,
+    t,
     userLocationText,
     isGpsActive,
     toggleGps,
@@ -72,8 +73,13 @@ export const CareFrontdoor: React.FC = () => {
 
   const fallbackAudioIntake = () => {
     setTimeout(() => {
-      const sampleSheng = '“Nimekuwa na maumivu ya tumbo for two days, na pia nahisi homa kidogo.”';
-      sendMessage(sampleSheng, true);
+      const sampleText =
+        languagePreference === 'eng'
+          ? '“I have had stomach pain for two days, and I also feel a slight fever.”'
+          : languagePreference === 'swa'
+          ? '“Nimekuwa na maumivu ya tumbo kwa siku mbili, na pia nahisi homa kidogo.”'
+          : '“Nimekuwa na maumivu ya tumbo for two days, na pia nahisi homa kidogo.”';
+      sendMessage(sampleText, true);
       setIsListening(false);
       showToast(
         languagePreference === 'eng'
@@ -111,7 +117,7 @@ export const CareFrontdoor: React.FC = () => {
           <button
             onClick={toggleGps}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low shadow-xs hover:bg-surface-container active:scale-95 transition-all text-left"
-            title="Bonyeza kubadili GPS / Toggle Location"
+            title="Toggle Location"
           >
             <span className={`w-2 h-2 rounded-full ${isGpsActive ? 'bg-primary-container animate-ping' : 'bg-outline'}`}></span>
             <span className="text-xs text-on-surface-variant flex items-center gap-1 font-medium">
@@ -132,8 +138,8 @@ export const CareFrontdoor: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[18px] text-primary">voice_chat</span>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-on-primary-fixed">Bilingual Care AI • Kiswahili + English</span>
-              <span className="text-[10px] text-on-surface-variant">Code-switching engine tuned for Kenyan conversational triage</span>
+              <span className="text-xs font-bold text-on-primary-fixed">{t.bannerTitle}</span>
+              <span className="text-[10px] text-on-surface-variant">{t.bannerSubtitle}</span>
             </div>
           </div>
           <button
@@ -159,7 +165,13 @@ export const CareFrontdoor: React.FC = () => {
             return (
               <div key={msg.id} className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-1.5 pr-1 text-[11px] text-on-surface-variant font-medium">
-                  <span>Wewe (You) • {msg.timestamp}</span>
+                  <span>
+                    {languagePreference === 'eng'
+                      ? `You • ${msg.timestamp}`
+                      : languagePreference === 'swa'
+                      ? `Wewe • ${msg.timestamp}`
+                      : `Wewe (You) • ${msg.timestamp}`}
+                  </span>
                   <span className="material-symbols-outlined text-[13px] text-primary">check_circle</span>
                 </div>
                 <div className="max-w-[85%] rounded-2xl rounded-tr-xs bg-primary-container p-3.5 shadow-sm text-on-primary flex flex-col gap-2">
@@ -199,7 +211,7 @@ export const CareFrontdoor: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-fixed/40 text-on-primary-fixed-variant text-[11px] font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
-                    {msg.dialectTag || 'Swahili + English Response'}
+                    {msg.dialectTag || (languagePreference === 'eng' ? 'English Response' : languagePreference === 'swa' ? 'Kiswahili Pekee' : 'Swahili + English Response')}
                   </span>
                   <button
                     onClick={() => playAssistantSpeech(msg.text)}
@@ -208,7 +220,7 @@ export const CareFrontdoor: React.FC = () => {
                     <span className="material-symbols-outlined text-[15px]">
                       {isPlayingAudio ? 'volume_up' : 'play_circle'}
                     </span>
-                    <span>Sikiliza (Listen)</span>
+                    <span>{t.listenAudio}</span>
                   </button>
                 </div>
 
@@ -282,7 +294,7 @@ export const CareFrontdoor: React.FC = () => {
                         className="h-10 px-3 rounded-lg bg-surface-container-highest text-on-surface text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-dim transition-colors"
                       >
                         <span className="material-symbols-outlined text-[15px]">list_alt</span>
-                        Ona Vituo / Options
+                        {t.viewOptions}
                       </button>
                       <button
                         onClick={() =>
@@ -296,7 +308,7 @@ export const CareFrontdoor: React.FC = () => {
                         className="h-10 px-3 rounded-lg bg-primary-container text-on-primary text-xs font-bold flex items-center justify-center gap-1 shadow-xs active:bg-primary transition-all"
                       >
                         <span className="material-symbols-outlined text-[15px]">event_available</span>
-                        Book Slot Hii
+                        {t.bookThisSlot}
                       </button>
                     </div>
                   </div>
@@ -336,33 +348,25 @@ export const CareFrontdoor: React.FC = () => {
       <div className="flex flex-col gap-1 pt-1">
         <span className="text-[11px] text-on-surface-variant flex items-center gap-1 font-semibold">
           <span className="material-symbols-outlined text-[14px] text-tertiary-container">tips_and_updates</span>
-          Majibu ya haraka (Quick Prompts):
+          {t.quickPromptsTitle}
         </span>
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          <button
-            onClick={() => sendMessage('Nahitaji daktari leo')}
-            className="px-3 py-1.5 rounded-full bg-surface-container-lowest text-on-surface text-xs font-medium shadow-xs whitespace-nowrap active:bg-surface-container transition-colors border border-surface-container-high"
-          >
-            🩺 Nahitaji daktari leo
-          </button>
-          <button
-            onClick={() => setActivePatientTab('vituo')}
-            className="px-3 py-1.5 rounded-full bg-surface-container-lowest text-on-surface text-xs font-medium shadow-xs whitespace-nowrap active:bg-surface-container transition-colors border border-surface-container-high"
-          >
-            📍 Check nearby hospitals
-          </button>
-          <button
-            onClick={() => sendMessage('Nimekuwa na maumivu makali ya tumbo')}
-            className="px-3 py-1.5 rounded-full bg-surface-container-lowest text-on-surface text-xs font-medium shadow-xs whitespace-nowrap active:bg-surface-container transition-colors border border-surface-container-high"
-          >
-            💊 Maumivu ya tumbo
-          </button>
-          <button
-            onClick={() => sendMessage('Mtoto ana homa kali')}
-            className="px-3 py-1.5 rounded-full bg-surface-container-lowest text-on-surface text-xs font-medium shadow-xs whitespace-nowrap active:bg-surface-container transition-colors border border-surface-container-high"
-          >
-            👶 Mtoto ana homa kali
-          </button>
+          {t.quickPrompts.map((qp: { text: string; actionText: string }, idx: number) => (
+            <button
+              key={idx}
+              onClick={() => {
+                const lower = qp.actionText.toLowerCase();
+                if (lower.includes('nearby') || lower.includes('vituo') || lower.includes('hospital')) {
+                  setActivePatientTab('vituo');
+                } else {
+                  sendMessage(qp.actionText);
+                }
+              }}
+              className="px-3 py-1.5 rounded-full bg-surface-container-lowest text-on-surface text-xs font-medium shadow-xs whitespace-nowrap active:bg-surface-container transition-colors border border-surface-container-high"
+            >
+              {qp.text}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -376,7 +380,7 @@ export const CareFrontdoor: React.FC = () => {
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Eleza unavyohisi / Describe how you feel..."
+            placeholder={t.inputPlaceholder}
             className="w-full bg-transparent text-on-surface text-sm placeholder-on-surface-variant/70 focus:outline-none"
           />
           <button
@@ -409,16 +413,16 @@ export const CareFrontdoor: React.FC = () => {
               <span className="material-symbols-outlined text-[20px]">
                 {isListening ? 'mic_active' : 'mic'}
               </span>
-              <span>{isListening ? 'Inasikiliza... (Listening)' : 'Shikilia Kuongea (Hold to Talk)'}</span>
+              <span>{isListening ? t.listening : t.holdToTalk}</span>
             </button>
             <span className="text-[10px] text-on-surface-variant max-w-[90px] leading-tight font-medium">
-              Sheng, Swahili au English
+              {t.langHint}
             </span>
           </div>
 
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => showToast('📎 Ambatanisha picha au ripoti ya maabara (Lab photo upload)')}
+              onClick={() => showToast(languagePreference === 'eng' ? '📎 Attach lab results or photo' : '📎 Ambatanisha picha au ripoti ya maabara')}
               className="w-10 h-10 rounded-xl bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center active:bg-surface-container-high transition-colors shadow-xs"
               title="Attach Lab results or photo"
             >
@@ -440,7 +444,7 @@ export const CareFrontdoor: React.FC = () => {
       <div className="flex items-center justify-center gap-1.5 text-center text-on-surface-variant pt-1">
         <span className="material-symbols-outlined text-[14px] text-primary">cell_tower</span>
         <span className="text-[11px] font-medium">
-          AfyaConnect SMS / USSD Fallback active via <strong>*384#</strong>
+          {t.smsFallback}
         </span>
       </div>
     </div>

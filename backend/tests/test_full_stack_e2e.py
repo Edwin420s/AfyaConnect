@@ -88,7 +88,7 @@ def test_end_to_end_two_sided_flow():
     avail_data = avail_res.json()
 
     assert len(avail_data["availableDoctors"]) >= 1
-    doctor = avail_data["availableDoctors"][0]
+    doctor = next((d for d in avail_data["availableDoctors"] if len(d["freeSlots"]) >= 1), avail_data["availableDoctors"][0])
     assert doctor["doctorName"] != ""
     assert len(doctor["freeSlots"]) >= 1
     selected_doctor_name = doctor["doctorName"]

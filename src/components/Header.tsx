@@ -7,17 +7,25 @@ export const Header: React.FC = () => {
     currentRole,
     setCurrentRole,
     languagePreference,
-    toggleLanguagePreference,
+    setLanguagePreference,
     setActivePatientTab,
+    t,
   } = useApp();
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
 
   const roleLabels: Record<UserRole, { title: string; badge: string; icon: string }> = {
-    patient: { title: 'Mgonjwa / Patient', badge: 'Patient App', icon: 'person' },
-    hospital: { title: 'Mapokezi / Hospital Intake', badge: 'Hospital Staff', icon: 'local_hospital' },
-    doctor: { title: 'Daktari / Doctor Roster', badge: 'Doctor OPD', icon: 'stethoscope' },
-    admin: { title: 'Usimamizi / Admin', badge: 'Metropolis Admin', icon: 'admin_panel_settings' },
+    patient: { title: t.rolePatient, badge: 'Patient App', icon: 'person' },
+    hospital: { title: t.roleHospital, badge: 'Hospital Staff', icon: 'local_hospital' },
+    doctor: { title: t.roleDoctor, badge: 'Doctor OPD', icon: 'stethoscope' },
+    admin: { title: t.roleAdmin, badge: 'Metropolis Admin', icon: 'admin_panel_settings' },
   };
+
+  const languages = [
+    { id: 'eng' as const, label: 'English', flag: '🇬🇧', tag: 'ENG' },
+    { id: 'swa' as const, label: 'Kiswahili', flag: '🇰🇪', tag: 'SWA' },
+    { id: 'swa_eng' as const, label: 'Sheng (Code-switch)', flag: '🇰🇪', tag: 'MIX' },
+  ];
 
   const handleRoleSelect = (role: UserRole) => {
     setCurrentRole(role);
@@ -117,21 +125,56 @@ export const Header: React.FC = () => {
           </div>
 
 
-          {/* Bilingual Toggle Button */}
-          <button
-            onClick={toggleLanguagePreference}
-            className="h-8 md:h-9 px-2.5 rounded-full bg-surface-container flex items-center gap-1 text-on-surface-variant hover:text-on-surface active:bg-surface-container-high transition-colors shadow-xs"
-            title="Badili Lugha / Toggle Language Mode"
-          >
-            <span className="material-symbols-outlined text-[15px] text-primary">translate</span>
-            <span className="text-xs font-bold uppercase">
-              {languagePreference === 'swa_eng'
-                ? 'ENG / SWA'
-                : languagePreference === 'swa'
-                ? 'SWA'
-                : 'ENG'}
-            </span>
-          </button>
+          {/* Interactive Language Selector Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsLangDropdownOpen(prev => !prev)}
+              className="h-8 md:h-9 px-2.5 rounded-full bg-surface-container flex items-center gap-1.5 text-on-surface hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+              title="Chagua Lugha / Select Language"
+            >
+              <span className="material-symbols-outlined text-[15px] text-primary">translate</span>
+              <span className="text-xs font-bold uppercase">
+                {languagePreference === 'eng' ? '🇬🇧 ENG' : languagePreference === 'swa' ? '🇰🇪 SWA' : '🇰🇪 MIX'}
+              </span>
+              <span className="material-symbols-outlined text-[13px] text-outline">expand_more</span>
+            </button>
+
+            {isLangDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsLangDropdownOpen(false)}
+                />
+                <div className="absolute right-0 mt-1.5 w-48 bg-surface-container-lowest rounded-xl shadow-xl border border-surface-container-high p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-outline border-b border-surface-container mb-1">
+                    Chagua Lugha (Language)
+                  </div>
+                  {languages.map(lang => (
+                    <button
+                      key={lang.id}
+                      onClick={() => {
+                        setLanguagePreference(lang.id);
+                        setIsLangDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+                        languagePreference === lang.id
+                          ? 'bg-primary text-on-primary font-bold'
+                          : 'text-on-surface hover:bg-surface-container'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{lang.flag}</span>
+                        <span>{lang.label}</span>
+                      </div>
+                      {languagePreference === lang.id && (
+                        <span className="material-symbols-outlined text-[15px]">check</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* User Profile Badge */}
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow-xs text-on-primary">

@@ -13,9 +13,10 @@ import {
   fetchBackendFacilities,
   fetchHospitalDashboard,
 } from '../lib/api/client';
+import { AppLanguage, Translations, translations } from '../lib/i18n';
 
-interface AppContextType {
-  // Role & Navigation
+export interface AppContextType {
+  // Navigation & Role
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
   activePatientTab: 'triage' | 'vituo' | 'miadi' | 'hospital';
@@ -24,8 +25,10 @@ interface AppContextType {
   setSelectedFacilityForDetail: (id: string | null) => void;
   
   // Language & Location
-  languagePreference: 'swa_eng' | 'swa' | 'eng';
+  languagePreference: AppLanguage;
+  setLanguagePreference: (lang: AppLanguage) => void;
   toggleLanguagePreference: () => void;
+  t: Translations;
   userLocationText: string;
   isGpsActive: boolean;
   toggleGps: () => void;
@@ -94,7 +97,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentRole, setCurrentRole] = useState<UserRole>('patient');
   const [activePatientTab, setActivePatientTab] = useState<'triage' | 'vituo' | 'miadi' | 'hospital'>('triage');
   const [selectedFacilityForDetail, setSelectedFacilityForDetail] = useState<string | null>('f-agakhan');
-  const [languagePreference, setLanguagePreference] = useState<'swa_eng' | 'swa' | 'eng'>('swa_eng');
+  const [languagePreference, setLanguagePreference] = useState<AppLanguage>('swa_eng');
+  const t = translations[languagePreference];
   const [userLocationText, setUserLocationText] = useState<string>('Westlands, Nairobi • < 2.5 km');
   const [isGpsActive, setIsGpsActive] = useState<boolean>(true);
 
@@ -102,6 +106,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [careRequests, setCareRequests] = useState<CareRequest[]>(INITIAL_CARE_REQUESTS);
   const [activeRequestId, setActiveRequestId] = useState<string>('#10482');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([WELCOME_CHAT_MESSAGE]);
+
+  // Synchronize welcome message when language changes
+  useEffect(() => {
+    setChatMessages(prev => {
+      const idx = prev.findIndex(m => m.id === 'welcome-afyaconnect');
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          text: t.welcomeMessage,
+          dialectTag:
+            languagePreference === 'eng'
+              ? 'ENGLISH'
+              : languagePreference === 'swa'
+              ? 'KISWAHILI'
+              : 'AFYACONNECT BILINGUAL',
+          options: t.welcomeOptions,
+        };
+        return updated;
+      }
+      return prev;
+    });
+  }, [languagePreference, t]);
 
   // Load real facilities and live care requests from backend database on mount
   useEffect(() => {
@@ -155,7 +182,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleLanguagePreference = () => {
-    setLanguagePreference(prev => {
+    setLanguagePreference((prev: AppLanguage) => {
       if (prev === 'swa_eng') return 'swa';
       if (prev === 'swa') return 'eng';
       return 'swa_eng';
@@ -572,7 +599,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedFacilityForDetail,
         setSelectedFacilityForDetail,
         languagePreference,
+        setLanguagePreference,
         toggleLanguagePreference,
+        t,
         userLocationText,
         isGpsActive,
         toggleGps,

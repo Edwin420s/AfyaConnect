@@ -7,6 +7,8 @@ export const BookingSheetModal: React.FC = () => {
     setIsBookingSheetOpen,
     pendingBooking,
     confirmBooking,
+    t,
+    languagePreference,
   } = useApp();
 
   const [phoneNumber, setPhoneNumber] = useState('712 345 678');
@@ -21,7 +23,7 @@ export const BookingSheetModal: React.FC = () => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[24px]">event_available</span>
-            <h3 className="font-bold text-base text-on-surface">Thibitisha Miadi (Book Slot)</h3>
+            <h3 className="font-bold text-base text-on-surface">{t.bookSlotTitle}</h3>
           </div>
           <button
             onClick={() => setIsBookingSheetOpen(false)}
@@ -34,15 +36,15 @@ export const BookingSheetModal: React.FC = () => {
         {/* Chosen Slot Summary */}
         <div className="p-3 rounded-xl bg-surface-container-low mb-4 space-y-2 border border-surface-container-high/50 text-xs">
           <div className="flex justify-between items-center">
-            <span className="text-on-surface-variant">Kituo / Facility:</span>
+            <span className="text-on-surface-variant">{t.facilityLabel}</span>
             <span className="font-bold text-on-surface">{pendingBooking.hospital}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-on-surface-variant">Mtoa Huduma:</span>
+            <span className="text-on-surface-variant">{t.doctorLabel}</span>
             <span className="font-bold text-primary">{pendingBooking.doctor}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-on-surface-variant">Muda / Selected Time:</span>
+            <span className="text-on-surface-variant">{t.timeLabel}</span>
             <span className="font-extrabold text-tertiary">{pendingBooking.slot}</span>
           </div>
         </div>
@@ -50,7 +52,7 @@ export const BookingSheetModal: React.FC = () => {
         {/* Phone Number Input */}
         <div className="space-y-1.5 mb-4">
           <label className="text-xs font-bold text-on-surface-variant">
-            Nambari ya Simu (M-PESA / SMS Pass)
+            {t.phoneLabel}
           </label>
           <div className="flex items-center px-3 h-12 rounded-lg bg-surface-container text-on-surface border border-surface-container-high/60 focus-within:ring-1 focus-within:ring-primary">
             <span className="text-xs font-bold text-outline mr-2">+254</span>
@@ -69,11 +71,11 @@ export const BookingSheetModal: React.FC = () => {
           onClick={() => confirmBooking(phoneNumber)}
           className="w-full h-12 rounded-xl bg-primary text-on-primary font-bold text-sm flex items-center justify-center gap-2 shadow-md active:scale-98 transition-all hover:bg-primary-container"
         >
-          <span>Kamilisha Miadi (Book Slot)</span>
+          <span>{t.completeBookingBtn}</span>
           <span className="material-symbols-outlined text-[20px]">check_circle</span>
         </button>
         <p className="text-[11px] text-on-surface-variant text-center mt-2.5 font-medium">
-          Msimbo wa QR na SMS ya uthibitisho vitatumwa mara moja.
+          {t.bookingNote}
         </p>
       </div>
     </div>

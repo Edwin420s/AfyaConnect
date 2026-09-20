@@ -12,21 +12,27 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
     cancelBooking,
     showToast,
     setActivePatientTab,
+    t,
+    languagePreference,
   } = useApp();
 
   const [isRescheduling, setIsRescheduling] = useState(false);
-  const [selectedNewSlot, setSelectedNewSlot] = useState('Kesho 2:00 PM');
+  const [selectedNewSlot, setSelectedNewSlot] = useState(languagePreference === 'eng' ? 'Tomorrow 2:00 PM' : 'Kesho 2:00 PM');
 
   const handleConfirmReschedule = () => {
     rescheduleBooking(selectedNewSlot);
     setIsRescheduling(false);
-    showToast(`✓ Saa ya miadi imebadilishwa: ${selectedNewSlot}`);
+    showToast(languagePreference === 'eng' ? `✓ Appointment rescheduled: ${selectedNewSlot}` : `✓ Saa ya miadi imebadilishwa: ${selectedNewSlot}`);
   };
 
   const handleCancel = () => {
-    if (window.confirm('Una uhakika unataka kughairi miadi yako ya ' + (activeRequest.assignedSlot || '10:30 AM') + '?')) {
+    const confirmMsg =
+      languagePreference === 'eng'
+        ? `Are you sure you want to cancel your appointment for ${activeRequest.assignedSlot || '10:30 AM'}?`
+        : `Una uhakika unataka kughairi miadi yako ya ${activeRequest.assignedSlot || '10:30 AM'}?`;
+    if (window.confirm(confirmMsg)) {
       cancelBooking();
-      showToast('Miadi imeghairiwa. Hospitali imejulishwa.');
+      showToast(languagePreference === 'eng' ? 'Appointment cancelled. Hospital notified.' : 'Miadi imeghairiwa. Hospitali imejulishwa.');
     }
   };
 
@@ -42,14 +48,14 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          <span>Rudi kwenye Mazungumzo (Back to Triage)</span>
+          <span>{t.backToTriage}</span>
         </button>
         <button
           onClick={() => setActivePatientTab('vituo')}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-primary text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
         >
           <span className="material-symbols-outlined text-[18px]">local_hospital</span>
-          <span>Tazama Vituo (Facilities)</span>
+          <span>{t.navFacilities}</span>
         </button>
       </div>
 
@@ -69,8 +75,8 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
               <span className={`w-1.5 h-1.5 rounded-full ${isCancelled ? 'bg-error' : 'bg-primary animate-ping'}`}></span>
               <span>
                 {isCancelled
-                  ? 'Miadi Imeghairiwa • Cancelled'
-                  : 'Miadi Imethibitishwa • Confirmed'}
+                  ? t.appointmentCancelled
+                  : t.appointmentConfirmed}
               </span>
             </span>
           </div>
@@ -118,16 +124,16 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
             </div>
             <div>
               <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-bold">
-                Tarehe na Saa / Slot
+                {t.dateTimeSlot}
               </p>
               <p className="text-xs font-bold text-on-surface">
-                {activeRequest.preferredDate || 'Kesho, Jumanne 24 Sept'} • {activeRequest.assignedSlot || '10:30 AM'}
+                {activeRequest.preferredDate || (languagePreference === 'eng' ? 'Tomorrow, Tuesday 24 Sept' : 'Kesho, Jumanne 24 Sept')} • {activeRequest.assignedSlot || '10:30 AM'}
               </p>
             </div>
           </div>
           <div className="text-right">
             <span className="inline-block px-2 py-0.5 rounded-full bg-tertiary-fixed text-tertiary text-[11px] font-bold">
-              Ghorofa ya 2 (2nd Flr)
+              {languagePreference === 'eng' ? '2nd Floor OPD' : 'Ghorofa ya 2 (2nd Flr)'}
             </span>
           </div>
         </div>
@@ -212,7 +218,7 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
               </div>
               <p className="text-[11px] text-on-surface-variant mt-2 flex items-center gap-1 font-medium">
                 <span className="material-symbols-outlined text-[15px] text-primary">qr_code_scanner</span>
-                Onyesha kwenye mapokezi ya geti (Offline scannable)
+                {t.qrPassDesc}
               </p>
             </div>
           </div>
@@ -242,14 +248,14 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
               className="h-11 px-3 rounded-lg bg-surface-container flex items-center justify-center gap-1.5 text-on-surface hover:bg-surface-container-high active:scale-95 transition-all text-center text-xs font-bold"
             >
               <span className="material-symbols-outlined text-primary text-[18px]">directions_car</span>
-              <span>Directions</span>
+              <span>{languagePreference === 'eng' ? 'Directions' : 'Pata Njia'}</span>
             </a>
             <a
               href="tel:+254203662000"
               className="h-11 px-3 rounded-lg bg-surface-container flex items-center justify-center gap-1.5 text-on-surface hover:bg-surface-container-high active:scale-95 transition-all text-center text-xs font-bold"
             >
               <span className="material-symbols-outlined text-primary text-[18px]">call</span>
-              <span>Wasiliana Nasi</span>
+              <span>{languagePreference === 'eng' ? 'Call Hospital' : 'Wasiliana Nasi'}</span>
             </a>
           </div>
         </div>
@@ -259,7 +265,7 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm space-y-3.5 border border-surface-container-high/60">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-sm text-on-surface">Hali ya Maombi (Status)</h3>
+            <h3 className="font-bold text-sm text-on-surface">{languagePreference === 'eng' ? 'Appointment Status' : 'Hali ya Maombi (Status)'}</h3>
             <p className="text-xs text-on-surface-variant">Live Referral Synchronization ({activeRequest.timeline.filter(t => t.completed).length}/{activeRequest.timeline.length})</p>
           </div>
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary-container text-on-primary text-xs font-bold shadow-xs">
@@ -306,13 +312,13 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Patient Preparation Guide (Bilingual Swahili & English) */}
+      {/* Patient Preparation Guide */}
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm space-y-3 border border-surface-container-high/60">
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-tertiary-container text-[22px]">
             assignment_turned_in
           </span>
-          <h3 className="font-bold text-sm text-on-surface">Maagizo Muhimu • Instructions</h3>
+          <h3 className="font-bold text-sm text-on-surface">{languagePreference === 'eng' ? 'Important Instructions' : 'Maagizo Muhimu • Instructions'}</h3>
         </div>
 
         <div className="space-y-2 pt-0.5">
@@ -321,9 +327,11 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
               <span className="material-symbols-outlined text-[16px]">badge</span>
             </div>
             <div className="text-on-surface">
-              <p className="text-xs font-bold">Beba Kitambulisho / Identification</p>
+              <p className="text-xs font-bold">{languagePreference === 'eng' ? 'Bring Identification' : 'Beba Kitambulisho / Identification'}</p>
               <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                Beba kitambulisho cha Taifa (Original National ID) au kadi ya kidijitali ya SHA/NHIF kwa ajili ya uthibitisho wa bima.
+                {languagePreference === 'eng'
+                  ? 'Carry your National ID or digital SHA/NHIF card for insurance eligibility verification.'
+                  : 'Beba kitambulisho cha Taifa (Original National ID) au kadi ya kidijitali ya SHA/NHIF kwa ajili ya uthibitisho wa bima.'}
               </p>
             </div>
           </div>
@@ -333,9 +341,11 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
               <span className="material-symbols-outlined text-[16px]">schedule</span>
             </div>
             <div className="text-on-surface">
-              <p className="text-xs font-bold">Fika Mapema / Early Arrival</p>
+              <p className="text-xs font-bold">{languagePreference === 'eng' ? 'Early Arrival' : 'Fika Mapema / Early Arrival'}</p>
               <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                Tafadhali fika dakika 15 kabla ya saa 10:30 AM ili kupimwa shinikizo la damu (Triage Vitals Check) kwenye kaunta ya mapokezi.
+                {languagePreference === 'eng'
+                  ? 'Please arrive 15 minutes before your scheduled appointment time for triage vitals check.'
+                  : 'Tafadhali fika dakika 15 kabla ya saa ya miadi ili kupimwa shinikizo la damu (Triage Vitals Check) kwenye kaunta ya mapokezi.'}
               </p>
             </div>
           </div>
@@ -345,44 +355,13 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
               <span className="material-symbols-outlined text-[16px]">medication</span>
             </div>
             <div className="text-on-surface">
-              <p className="text-xs font-bold">Dawa za Sasa / Current Prescriptions</p>
+              <p className="text-xs font-bold">{languagePreference === 'eng' ? 'Current Prescriptions' : 'Dawa za Sasa / Current Prescriptions'}</p>
               <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                Kama unatumia dawa zozote za kudumu, beba pakiti zake au picha ya maagizo ya daktari wa awali.
+                {languagePreference === 'eng'
+                  ? 'If taking regular medication, bring original packets or previous doctor prescription slips.'
+                  : 'Kama unatumia dawa zozote za kudumu, beba pakiti zake au picha ya maagizo ya daktari wa awali.'}
               </p>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Location Map Thumbnail Snapshot */}
-      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm space-y-2 border border-surface-container-high/60">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[20px]">pin_drop</span>
-            <span className="text-xs font-bold text-on-surface">Eneo la Kliniki (Facility Map)</span>
-          </div>
-          <span className="text-[11px] text-on-surface-variant">Nairobi Central • 4.2 km</span>
-        </div>
-
-        <div
-          className="w-full h-36 bg-cover bg-center rounded-lg relative overflow-hidden flex items-end p-2.5 shadow-xs"
-          style={{
-            backgroundImage: `url('https://lh3.googleusercontent.com/aida-public/AB6AXuA-unse0L1tiBaxYTmjpdbkO4z_va32utjhSHH2TnMKQi8goAeH36fHN5ZRJzkpMv3mW-ko_7BPSAR9mNBugaknkAkm_3UwGBJpbsHrq2y3OfbPGvOKovKg_hHt1Y9BW7z9jA9Jru0o__RQ0wl30le_h2f6k0ifyxrBfb4qbhFsano-NH5qTRpb4WsYCcCCchQ8dwqrHAQZzypfnGl6VgEfVc8h-Au50U-611r_xaNDWxZVzeI9nF9T')`,
-          }}
-        >
-          <div className="w-full p-2 rounded-md bg-surface-container-lowest/90 backdrop-blur-sm flex items-center justify-between shadow-xs">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold text-on-surface truncate">3rd Parklands Avenue, Gate 2</p>
-              <p className="text-[10px] text-on-surface-variant truncate">Nafasi za maegesho zipo (Parking available)</p>
-            </div>
-            <a
-              href="https://maps.google.com/?q=Aga+Khan+University+Hospital+Nairobi"
-              target="_blank"
-              rel="noreferrer"
-              className="material-symbols-outlined text-primary text-[18px]"
-            >
-              open_in_new
-            </a>
           </div>
         </div>
       </div>
@@ -391,7 +370,7 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
       <div className="space-y-2 pt-1">
         {isRescheduling ? (
           <div className="p-3.5 rounded-xl bg-surface-container-lowest border border-primary/30 space-y-3">
-            <h4 className="text-xs font-bold text-on-surface">Chagua Muda Mpya (Select New Slot):</h4>
+            <h4 className="text-xs font-bold text-on-surface">{t.selectNewSlot}</h4>
             <div className="grid grid-cols-2 gap-2">
               {['Kesho 09:00 AM', 'Kesho 02:00 PM', 'Jumatano 10:30 AM', 'Jumatano 03:30 PM'].map((slot) => (
                 <button
@@ -412,13 +391,13 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
                 onClick={handleConfirmReschedule}
                 className="flex-1 h-10 rounded-lg bg-primary text-on-primary font-bold text-xs active:scale-98 transition-all"
               >
-                Thibitisha Wakati Mpya
+                {t.confirmNewTime}
               </button>
               <button
                 onClick={() => setIsRescheduling(false)}
                 className="px-3 h-10 rounded-lg bg-surface-container text-on-surface text-xs font-bold"
               >
-                Ghairi
+                {t.cancel}
               </button>
             </div>
           </div>
@@ -428,7 +407,7 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
             className="w-full h-11 rounded-lg bg-surface-container-high hover:bg-surface-variant active:scale-98 transition-all flex items-center justify-center gap-2 text-on-surface text-xs font-bold shadow-xs"
           >
             <span className="material-symbols-outlined text-[18px]">update</span>
-            <span>Omba Kubadilisha Wakati (Reschedule)</span>
+            <span>{t.requestReschedule}</span>
           </button>
         )}
 
@@ -438,7 +417,7 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
             className="w-full h-11 rounded-lg bg-surface-container-low hover:bg-error-container hover:text-on-error-container active:scale-98 transition-all flex items-center justify-center gap-2 text-on-surface-variant text-xs font-medium"
           >
             <span className="material-symbols-outlined text-[18px]">event_busy</span>
-            <span>Ghairi Miadi Hii (Cancel Booking)</span>
+            <span>{t.cancelBooking}</span>
           </button>
         )}
       </div>
@@ -446,11 +425,7 @@ export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
       {/* Emergency Assistance Footer */}
       <div className="p-3 rounded-lg bg-surface-container-low text-center border border-surface-container-high/40">
         <p className="text-[11px] text-on-surface-variant">
-          Usaidizi wa dharura? Piga{' '}
-          <a className="text-primary font-bold underline" href="tel:1199">
-            1199 (Red Cross)
-          </a>{' '}
-          au wasiliana na AfyaConnect Support kwa WhatsApp.
+          {t.emergencySupportText}
         </p>
       </div>
     </div>

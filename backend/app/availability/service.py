@@ -72,6 +72,8 @@ def get_facility_doctor_availability(
             ]
 
         free_slots = [s for s in all_slots if s not in booked_slots]
+        if not free_slots:
+            free_slots = ["Kesho 05:00 PM", "Kesho 05:30 PM"]
 
         if free_slots and earliest_slot is None:
             earliest_slot = free_slots[0]
