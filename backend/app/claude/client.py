@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 
 from .prompts import AFYACONNECT_SYSTEM_PROMPT
 from .tools import AFYACONNECT_CLAUDE_TOOLS
-from .care_navigation import determine_care_pathway
+from .care_navigation import determine_care_pathway, analyze_clinical_intake, SPECIALIST_ROSTER
 from ..emergency.service import evaluate_clinical_safety
 from ..location.service import find_nearby_facilities
 from ..availability.service import get_facility_doctor_availability, validate_and_hold_slot
 from ..notifications.service import dispatch_sms_notification
-from ..database.models import CareRequest, CareRequestEvent, Appointment, RequestStatusEnum, UrgencyEnum, AppointmentStatusEnum
+from ..database.models import Facility, CareRequest, CareRequestEvent, Appointment, RequestStatusEnum, UrgencyEnum, AppointmentStatusEnum
 
 
 def execute_claude_tool(
@@ -169,30 +169,183 @@ def orchestrate_patient_turn(
             "executedTools": [],
         }
 
-    # 2. Care Pathway & Department
-    pathway = determine_care_pathway(patient_message)
+    # 2. Clinical Intake Evaluation & Clarification Check
+    intake = analyze_clinical_intake(patient_message, history=history, language_preference=language_preference)
+    pathway = intake["pathway"]
+    specialist = intake["specialist"]
+    needs_clarification = intake["needsClarification"]
 
-    # 3. Location & Nearby Facilities
-    nearby = find_nearby_facilities(db, department=pathway["department"], radius_km=5.0)
-    primary_facility = nearby[0] if nearby else {
-        "id": "f-agakhan",
-        "name": "Aga Khan Univ. Hospital",
-        "subCounty": "Parklands Sub-County",
-        "distanceKm": 1.4,
-        "driveTime": "~6 min drive",
-        "leadDoctor": "Dr. Wanjiku Kamau",
-        "earliestSlot": "Leo 3:30 PM",
-    }
-
-    # 4. Availability Check
-    avail = get_facility_doctor_availability(db, primary_facility["id"], pathway["departmentCode"])
-    lead_doc = avail["availableDoctors"][0]["doctorName"] if avail["availableDoctors"] else primary_facility.get("leadDoctor", "Dr. Wanjiku Kamau")
-    earliest_slot = avail["earliestAvailableSlot"]
-
-    # 5. Create Structured Care Request in DB (Case #10482 style)
     req_id = f"req-{int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)}-{random.randint(100, 999)}"
     ref_num = f"#{random.randint(20000, 99999)}"
 
+    # -------------------------------------------------------------------------
+    # BRANCH A: Patient needs clarification (greeting or vague 1-word message)
+    # Collects symptoms, duration, adult/child context BEFORE proposing doctor booking
+    # -------------------------------------------------------------------------
+    if needs_clarification:
+        target_facility_id = specialist.get("facilityId", "f-agakhan")
+        fac_obj = db.query(Facility).filter(Facility.id == target_facility_id).first()
+        facility_name = fac_obj.name if fac_obj else "AfyaConnect Clinical Gateway"
+
+        care_request = CareRequest(
+            id=req_id,
+            referenceNumber=ref_num,
+            patientId=patient_info.get("patientId", "pat-jane-1"),
+            facilityId=target_facility_id,
+            assignedDoctorName=None,
+            assignedSlot="Pending Triage",
+            verbatimTranscript=patient_message,
+            chiefConcern=patient_message[:60] if len(patient_message) > 60 else patient_message,
+            symptomDuration="Initial intake",
+            secondarySymptoms=json.dumps([pathway["department"], "Awaiting clinical details"]),
+            triageScore=pathway["triageScore"],
+            urgency=UrgencyEnum.URGENT if pathway["urgency"] == "URGENT" else UrgencyEnum.STANDARD,
+            clinicalSummary=f"Intake in progress: {patient_message}. Proposed Department: {pathway['department']}.",
+            flags=json.dumps(["Live AI Intake", "Clarification Active", "SHA Member"]),
+            preferredTime="Pending triage",
+            preferredDate="Pending triage",
+            status=RequestStatusEnum.RECEIVED,
+        )
+        db.add(care_request)
+        db.flush()
+
+        timeline_steps = [
+            (1, "CALL / CHAT MADE", "Patient initiated triage conversation via app / audio", time_now, True, False),
+            (2, "Request received", "Intake logged and symptom assessment in progress", time_now, True, True),
+            (3, "Hospital received request", "Hospital intake gateway received initial query", "Pending", False, False),
+            (4, "Department identified", pathway["department"], "Pending", False, False),
+            (5, "Doctor availability checked", "Awaiting clinical details before doctor allocation", "Pending", False, False),
+            (6, "Time proposed", "Pending triage completion", "Pending", False, False),
+            (7, "Patient confirmed", "Awaiting patient confirmation", "Pending", False, False),
+            (8, "APPOINTMENT BOOKED", "Final booking token pending", "Pending", False, False),
+        ]
+        for step_num, title, desc, ts, comp, act in timeline_steps:
+            db.add(CareRequestEvent(
+                id=f"evt-{req_id}-{step_num}",
+                careRequestId=care_request.id,
+                stepNumber=step_num,
+                title=title,
+                description=desc,
+                actor="Hospital Intake Gateway",
+                timestampText=ts,
+                isCompleted=comp,
+                isActive=act,
+            ))
+        db.commit()
+
+        if language_preference == "eng":
+            requested_time_text = "Pending triage details"
+            status_text = "Assessing symptoms"
+            dialect_tag = "ENGLISH"
+        elif language_preference == "swa":
+            requested_time_text = "Inasubiri maelezo"
+            status_text = "Inakaguliwa"
+            dialect_tag = "KISWAHILI PEKEE"
+        else:
+            requested_time_text = "Pending triage details"
+            status_text = "Checking symptoms"
+            dialect_tag = "SWA + ENG CODE-SWITCH"
+
+        feedback_card = {
+            "type": "request_received",
+            "department": pathway["department"],
+            "requestedTime": requested_time_text,
+            "statusText": status_text,
+            "facilityName": facility_name,
+            "requestId": ref_num,
+        }
+
+        return {
+            "text": intake["clarificationMessage"],
+            "responseMessage": intake["clarificationMessage"],
+            "isEmergency": False,
+            "isEmergencyAlert": False,
+            "triageScore": pathway["triageScore"],
+            "urgency": pathway["urgency"],
+            "triageLevel": f"Triage Level {pathway['triageScore']}",
+            "dialectTag": dialect_tag,
+            "feedbackCard": feedback_card,
+            "nearbyFacilities": [],
+            "careRequestId": care_request.id,
+            "referenceNumber": care_request.referenceNumber,
+            "options": intake["clarificationOptions"],
+            "createdCareRequest": {
+                "id": care_request.id,
+                "referenceNumber": care_request.referenceNumber,
+                "chiefConcern": care_request.chiefConcern,
+                "urgency": care_request.urgency,
+                "status": care_request.status,
+                "facilityId": care_request.facilityId,
+                "assignedDoctorName": None,
+                "assignedSlot": "Pending Triage",
+            },
+            "executedTools": [
+                {"toolName": "analyze_clinical_intake", "success": True, "needsClarification": True, "pathway": pathway["department"]},
+                {"toolName": "create_appointment_request", "success": True, "requestId": ref_num, "status": "RECEIVED"},
+            ],
+        }
+
+    # -------------------------------------------------------------------------
+    # BRANCH B: Clinical intake complete -> Match specific specialist & propose slot
+    # -------------------------------------------------------------------------
+    target_facility_id = specialist.get("facilityId", "f-agakhan")
+    lead_doc = specialist.get("doctorName", "Dr. Wanjiku Kamau")
+    specialty_name = specialist.get("specialist", pathway["suggestedSpecialty"])
+
+    # 3. Location & Nearby Facilities
+    nearby = find_nearby_facilities(db, department=pathway["department"], radius_km=5.0)
+    primary_facility = next((f for f in nearby if f["id"] == target_facility_id), None)
+    if not primary_facility:
+        fac_obj = db.query(Facility).filter(Facility.id == target_facility_id).first()
+        if fac_obj:
+            primary_facility = {
+                "id": fac_obj.id,
+                "name": fac_obj.name,
+                "subCounty": fac_obj.subCounty,
+                "distanceKm": fac_obj.distanceKm,
+                "driveTime": f"~{int(fac_obj.distanceKm * 4)} min drive",
+                "leadDoctor": lead_doc,
+                "earliestSlot": "Leo 3:30 PM",
+            }
+        else:
+            primary_facility = nearby[0] if nearby else {
+                "id": "f-agakhan",
+                "name": "Aga Khan Univ. Hospital",
+                "subCounty": "Parklands Sub-County",
+                "distanceKm": 1.4,
+                "driveTime": "~6 min drive",
+                "leadDoctor": lead_doc,
+                "earliestSlot": "Leo 3:30 PM",
+            }
+
+    # 4. Availability Check for Specific Specialist
+    avail = get_facility_doctor_availability(db, primary_facility["id"], pathway["departmentCode"])
+    matched_doc = next(
+        (
+            d for d in avail.get("availableDoctors", [])
+            if lead_doc.lower() in d.get("doctorName", "").lower()
+            or d.get("doctorName", "").lower() in lead_doc.lower()
+        ),
+        None,
+    )
+    if matched_doc:
+        lead_doc = matched_doc.get("doctorName", lead_doc)
+        if matched_doc.get("freeSlots"):
+            earliest_slot = matched_doc["freeSlots"][0]
+        elif matched_doc.get("slots"):
+            earliest_slot = matched_doc["slots"][0]
+        else:
+            earliest_slot = avail.get("earliestAvailableSlot", "Leo 3:30 PM")
+    elif avail.get("availableDoctors") and avail["availableDoctors"][0].get("freeSlots"):
+        earliest_slot = avail["availableDoctors"][0]["freeSlots"][0]
+        lead_doc = avail["availableDoctors"][0]["doctorName"]
+    elif avail.get("availableDoctors") and avail["availableDoctors"][0].get("slots"):
+        earliest_slot = avail["availableDoctors"][0]["slots"][0]
+        lead_doc = avail["availableDoctors"][0]["doctorName"]
+    else:
+        earliest_slot = avail.get("earliestAvailableSlot", "Leo 3:30 PM")
+
+    # 5. Create Structured Care Request in DB (Case #10482 style)
     care_request = CareRequest(
         id=req_id,
         referenceNumber=ref_num,
@@ -203,11 +356,11 @@ def orchestrate_patient_turn(
         verbatimTranscript=patient_message,
         chiefConcern=patient_message[:60] if len(patient_message) > 60 else patient_message,
         symptomDuration="2-3 days",
-        secondarySymptoms=json.dumps([pathway["department"], "Postural trigger"]),
+        secondarySymptoms=json.dumps([pathway["department"], specialty_name]),
         triageScore=pathway["triageScore"],
         urgency=UrgencyEnum.URGENT if pathway["urgency"] == "URGENT" else UrgencyEnum.STANDARD,
-        clinicalSummary=f"Intake: {patient_message}. Suggested: {pathway['department']}. Triage: {pathway['triageScore']}/5.",
-        flags=json.dumps(["Live AI Intake", "Auto-Location Active", "SHA Member"]),
+        clinicalSummary=f"Intake: {patient_message}. Specialist: {specialty_name} ({lead_doc}). Department: {pathway['department']}. Triage: {pathway['triageScore']}/5.",
+        flags=json.dumps(["Live AI Intake", "Specialist Matched", "Auto-Location Active", "SHA Member"]),
         preferredTime=earliest_slot,
         preferredDate="Kesho, Jumanne 24 Sept",
         status=RequestStatusEnum.RECEIVED,
@@ -220,9 +373,9 @@ def orchestrate_patient_turn(
         (1, "CALL / CHAT MADE", "Patient initiated triage conversation via app / audio", time_now, True, False),
         (2, "Request received", "Triage intake logged and pre-screened", time_now, True, False),
         (3, "Hospital received request", f"{primary_facility['name']} intake and triage queue synced", time_now, True, True),
-        (4, "Department identified", pathway["department"], "Pending", False, False),
-        (5, "Doctor availability checked", f"{lead_doc} calendar check", "Pending", False, False),
-        (6, "Time proposed", f"Slot {earliest_slot} pending patient confirmation", "Pending", False, False),
+        (4, "Department identified", f"{pathway['department']} ({specialty_name})", time_now, True, False),
+        (5, "Doctor availability checked", f"{lead_doc} calendar check verified", time_now, True, False),
+        (6, "Time proposed", f"Slot {earliest_slot} proposed to patient", time_now, True, True),
         (7, "Patient confirmed", "Awaiting patient confirmation", "Pending", False, False),
         (8, "APPOINTMENT BOOKED", "Final booking token pending", "Pending", False, False),
     ]
@@ -283,32 +436,31 @@ def orchestrate_patient_turn(
     if not live_claude_used:
         if language_preference == "eng":
             ai_text = (
-                f"I understand what you are experiencing regarding your {pathway['department'].lower()}. "
-                f"{pathway['explanationEnglish']} I found {len(nearby)} healthcare facilities near you "
-                f"in {primary_facility.get('subCounty', 'Nairobi')} with consultation slots available. "
-                f"Dr. {lead_doc} at {primary_facility['name']} is available {time_label}. Would you like to book this appointment?"
+                f"I understand what you are experiencing. Based on your symptoms, I recommend a consultation with {specialty_name} ({lead_doc}) "
+                f"in the {pathway['department']} department at {primary_facility['name']}. "
+                f"{pathway['explanationEnglish']} A verified slot is available {time_label}. "
+                f"Would you like to book this appointment?"
             )
         elif language_preference == "swa":
             ai_text = (
-                f"Nimekuelewa vizuri kuhusu {pathway['department']}. {pathway['explanationSwahili']} "
-                f"Nimepata vituo {len(nearby)} vilivyo karibu nawe hapa {primary_facility.get('subCounty', 'Nairobi')} "
-                f"vyenye nafasi ya daktari. Daktari {lead_doc} katika {primary_facility['name']} ana nafasi {time_label}. "
+                f"Kulingana na maelezo ya dalili zako, ninapendekeza mashauriano na {specialty_name} ({lead_doc}) "
+                f"katika kitengo cha {pathway['department']} hapa {primary_facility['name']}. "
+                f"{pathway['explanationSwahili']} Nafasi ya daktari inapatikana {time_label}. "
                 f"Je, ungependa kuthibitisha miadi hii?"
             )
         else:
-            # Code-switching: detect if user predominantly typed in English or Swahili
             user_has_swahili = any(sw in lower for sw in ["nimekuwa", "nahisi", "tumbo", "kichwa", "daktari", "kesho", "leo", "homa", "mtoto", "masikio", "jino", "ngozi", "kuona"])
             if not user_has_swahili:
                 ai_text = (
-                    f"Pole sana, I understand what you are experiencing. {pathway['explanationEnglish']} "
-                    f"I found {len(nearby)} nearby healthcare facilities in {primary_facility.get('subCounty', 'Nairobi')}. "
-                    f"Dr. {lead_doc} at {primary_facility['name']} has an open slot {time_label}. Would you like to book this consultation?"
+                    f"Based on your description, I recommend consulting with {specialty_name} ({lead_doc}) "
+                    f"in {pathway['department']} at {primary_facility['name']}. "
+                    f"{pathway['explanationEnglish']} A slot is available {time_label}. Would you like to book this appointment?"
                 )
             else:
                 ai_text = (
                     f"Pole sana, nimekuelewa vizuri: {pathway['explanationSwahili']} "
-                    f"Nimepata vituo {len(nearby)} vilivyo karibu hapa Nairobi. "
-                    f"Daktari {lead_doc} katika {primary_facility['name']} ana nafasi {time_label}. Je, ungependa kuthibitisha miadi hii?"
+                    f"Ninapendekeza {specialty_name} ({lead_doc}) katika hospitali ya {primary_facility['name']}. "
+                    f"Kuna nafasi {time_label}. Je, ungependa kuthibitisha miadi hii?"
                 )
 
     # 7. Feedback Card Data
@@ -383,6 +535,7 @@ def orchestrate_patient_turn(
             "assignedSlot": care_request.assignedSlot,
         },
         "executedTools": [
+            {"toolName": "analyze_clinical_intake", "success": True, "needsClarification": False, "specialist": lead_doc},
             {"toolName": "find_nearby_facilities", "success": True, "count": len(nearby)},
             {"toolName": "check_doctor_availability", "success": True, "doctor": lead_doc, "slot": earliest_slot},
             {"toolName": "create_appointment_request", "success": True, "requestId": ref_num},
