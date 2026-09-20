@@ -256,14 +256,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 subCounty: primaryFac.subCounty,
                 distance: `${primaryFac.distanceKm} km away`,
                 doctorName: primaryFac.leadDoctor,
-                doctorSpecialty: 'General Consultation',
+                doctorSpecialty: backendRes.feedbackCard?.department || 'General Consultation',
                 todaySlot: primaryFac.earliestSlot,
                 waitTime: '~15 mins wait',
                 coverage: 'SHA / NHIF Verified',
                 facilityId: primaryFac.id,
               }
             : undefined,
-          options: primaryFac
+          options: backendRes.options || (primaryFac
             ? (languagePreference === 'eng'
                 ? [
                     `Confirm Slot: ${primaryFac.leadDoctor} • ${primaryFac.earliestSlot.replace(/Leo\s*/gi, 'Today at ').replace(/Kesho\s*/gi, 'Tomorrow at ')}`,
@@ -281,7 +281,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     '📍 Ona Vituo / Other Options',
                     '🩺 Nahitaji daktari leo',
                   ])
-            : undefined,
+            : undefined),
         };
 
         setChatMessages(prev => [...prev, assistantMsg]);
