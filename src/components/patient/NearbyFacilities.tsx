@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
-export const NearbyFacilities: React.FC = () => {
+interface NearbyFacilitiesProps {
+  onBack?: () => void;
+}
+
+export const NearbyFacilities: React.FC<NearbyFacilitiesProps> = ({ onBack }) => {
   const {
     facilities,
     selectSlotForBooking,
@@ -9,6 +13,7 @@ export const NearbyFacilities: React.FC = () => {
     isGpsActive,
     toggleGps,
     showToast,
+    setActivePatientTab,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +60,24 @@ export const NearbyFacilities: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full max-w-xl mx-auto px-3 sm:px-4 pt-2 pb-24 space-y-3">
+      {/* Top Back Navigation Bar */}
+      <div className="flex items-center justify-between gap-2 pb-0.5">
+        <button
+          onClick={onBack || (() => setActivePatientTab('triage'))}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Rudi kwenye Mazungumzo (Back to Triage)</span>
+        </button>
+        <button
+          onClick={() => setActivePatientTab('miadi')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-primary text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+          <span>Miadi Yangu (Passes)</span>
+        </button>
+      </div>
+
       {/* Top Location Card */}
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container-high/60">
         <div className="flex items-center justify-between gap-2 mb-1.5">

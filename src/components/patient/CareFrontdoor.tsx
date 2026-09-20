@@ -309,9 +309,10 @@ export const CareFrontdoor: React.FC = () => {
                       <button
                         key={i}
                         onClick={() => {
-                          if (opt.includes('Ona Vituo') || opt.includes('nearby')) {
+                          const lower = opt.toLowerCase();
+                          if (lower.includes('vituo') || lower.includes('nearby') || lower.includes('facilit') || lower.includes('clinic')) {
                             setActivePatientTab('vituo');
-                          } else if (opt.includes('Book Kamau') || opt.includes('10:30 AM')) {
+                          } else if (lower.includes('book') || lower.includes('kamau') || lower.includes('10:30') || lower.includes('slot') || lower.includes('thibitisha')) {
                             selectSlotForBooking('Aga Khan Univ. Hospital', 'Dr. Wanjiku Kamau', 'Kesho 10:30 AM', 'f-agakhan');
                           } else {
                             sendMessage(opt);

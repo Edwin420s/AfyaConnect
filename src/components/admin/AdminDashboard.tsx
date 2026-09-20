@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
-export const AdminDashboard: React.FC = () => {
-  const { facilities, careRequests, showToast } = useApp();
+interface AdminDashboardProps {
+  onBack?: () => void;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
+  const { facilities, careRequests, showToast, setCurrentRole, setActivePatientTab } = useApp();
   const [activeTab, setActiveTab] = useState<'overview' | 'facilities' | 'audit'>('overview');
 
   const totalFacilities = facilities.length;
@@ -13,6 +17,24 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full max-w-4xl mx-auto px-3 sm:px-4 pt-2 pb-24 space-y-4">
+      {/* Top Back Navigation Bar */}
+      <div className="flex items-center justify-between gap-2 pb-0.5">
+        <button
+          onClick={onBack || (() => { setCurrentRole('patient'); setActivePatientTab('triage'); })}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Rudi kwenye Mgonjwa (Back to Patient View)</span>
+        </button>
+        <button
+          onClick={() => { setCurrentRole('hospital'); setActivePatientTab('hospital'); }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-primary text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">local_hospital</span>
+          <span>Mapokezi (Hospital Intake)</span>
+        </button>
+      </div>
+
       {/* Admin Header Banner */}
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container-high/60 flex items-center justify-between">
         <div className="flex items-center gap-3">

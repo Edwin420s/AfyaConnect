@@ -4,9 +4,10 @@ import { CareRequest } from '../../types';
 
 interface HospitalDashboardProps {
   onOpenDetail: (requestId: string) => void;
+  onBack?: () => void;
 }
 
-export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({ onOpenDetail }) => {
+export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({ onOpenDetail, onBack }) => {
   const {
     careRequests,
     assignDoctorToRequest,
@@ -14,6 +15,8 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({ onOpenDeta
     updateRequestDepartment,
     setActiveRequestId,
     showToast,
+    setCurrentRole,
+    setActivePatientTab,
   } = useApp();
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'awaiting' | 'checking' | 'confirmed' | 'urgent' | 'rescheduling' | 'completed'>('all');
@@ -74,6 +77,24 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({ onOpenDeta
 
   return (
     <div className="flex flex-col w-full max-w-3xl mx-auto px-3 sm:px-4 pt-2 pb-24 space-y-3.5">
+      {/* Top Back Navigation Bar */}
+      <div className="flex items-center justify-between gap-2 pb-0.5">
+        <button
+          onClick={onBack || (() => { setCurrentRole('patient'); setActivePatientTab('triage'); })}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Rudi kwenye Mgonjwa (Back to Patient View)</span>
+        </button>
+        <button
+          onClick={() => { setCurrentRole('doctor'); }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-primary text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">stethoscope</span>
+          <span>Daktari (Doctor Roster)</span>
+        </button>
+      </div>
+
       {/* Live Clinical WebSocket Status Banner */}
       <div className="flex items-center justify-between px-3.5 py-2 bg-primary-container/10 rounded-xl shadow-xs border border-primary/15">
         <div className="flex items-center gap-2 min-w-0">

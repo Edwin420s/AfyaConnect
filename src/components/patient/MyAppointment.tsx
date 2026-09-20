@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
-export const MyAppointment: React.FC = () => {
+interface MyAppointmentProps {
+  onBack?: () => void;
+}
+
+export const MyAppointment: React.FC<MyAppointmentProps> = ({ onBack }) => {
   const {
     activeRequest,
     rescheduleBooking,
@@ -31,6 +35,24 @@ export const MyAppointment: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full max-w-xl mx-auto px-3 sm:px-4 pt-2 pb-24 space-y-3.5">
+      {/* Top Back Navigation Bar */}
+      <div className="flex items-center justify-between gap-2 pb-0.5">
+        <button
+          onClick={onBack || (() => setActivePatientTab('triage'))}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Rudi kwenye Mazungumzo (Back to Triage)</span>
+        </button>
+        <button
+          onClick={() => setActivePatientTab('vituo')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-primary text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all shadow-xs"
+        >
+          <span className="material-symbols-outlined text-[18px]">local_hospital</span>
+          <span>Tazama Vituo (Facilities)</span>
+        </button>
+      </div>
+
       {/* Top Hero Status Greeting Card */}
       <div className="relative overflow-hidden rounded-xl bg-surface-container-lowest p-4 shadow-sm border border-surface-container-high/60">
         <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 rounded-full bg-primary-fixed/20 pointer-events-none blur-xl"></div>

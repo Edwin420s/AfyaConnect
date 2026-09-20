@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -20,26 +20,74 @@ import { DoctorDashboard } from './components/doctor/DoctorDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 
 export const App: React.FC = () => {
-  const { currentRole, activePatientTab } = useApp();
+  const { currentRole, activePatientTab, setCurrentRole, setActivePatientTab } = useApp();
   const [selectedHospitalRequestId, setSelectedHospitalRequestId] = useState<string | null>(null);
+
+  // Browser Back/Forward navigation integration
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state) {
+        if (event.state.selectedHospitalRequestId !== undefined) {
+          setSelectedHospitalRequestId(event.state.selectedHospitalRequestId);
+        }
+        if (event.state.role) {
+          setCurrentRole(event.state.role);
+        }
+        if (event.state.tab) {
+          setActivePatientTab(event.state.tab);
+        }
+      } else {
+        setSelectedHospitalRequestId(null);
+        setCurrentRole('patient');
+        setActivePatientTab('triage');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [setCurrentRole, setActivePatientTab]);
 
   const handleOpenHospitalDetail = (requestId: string) => {
     setSelectedHospitalRequestId(requestId);
+    window.history.pushState(
+      { role: 'hospital', tab: 'hospital', selectedHospitalRequestId: requestId },
+      ''
+    );
   };
 
   const handleCloseHospitalDetail = () => {
     setSelectedHospitalRequestId(null);
   };
 
+  const handleTabSelect = (tab: 'triage' | 'vituo' | 'miadi' | 'hospital') => {
+    setSelectedHospitalRequestId(null);
+    if (tab === 'hospital') {
+      setCurrentRole('hospital');
+      setActivePatientTab('hospital');
+      window.history.pushState({ role: 'hospital', tab: 'hospital', selectedHospitalRequestId: null }, '');
+    } else {
+      setCurrentRole('patient');
+      setActivePatientTab(tab);
+      window.history.pushState({ role: 'patient', tab, selectedHospitalRequestId: null }, '');
+    }
+  };
+
+  const handleBackToPatientTriage = () => {
+    setSelectedHospitalRequestId(null);
+    setCurrentRole('patient');
+    setActivePatientTab('triage');
+    window.history.pushState({ role: 'patient', tab: 'triage', selectedHospitalRequestId: null }, '');
+  };
+
   const renderContent = () => {
     // 1. Doctor View
     if (currentRole === 'doctor') {
-      return <DoctorDashboard />;
+      return <DoctorDashboard onBack={handleBackToPatientTriage} />;
     }
 
     // 2. Admin View
     if (currentRole === 'admin') {
-      return <AdminDashboard />;
+      return <AdminDashboard onBack={handleBackToPatientTriage} />;
     }
 
     // 3. Hospital View
@@ -52,7 +100,12 @@ export const App: React.FC = () => {
           />
         );
       }
-      return <HospitalDashboard onOpenDetail={handleOpenHospitalDetail} />;
+      return (
+        <HospitalDashboard
+          onOpenDetail={handleOpenHospitalDetail}
+          onBack={handleBackToPatientTriage}
+        />
+      );
     }
 
     // 4. Patient Views
@@ -60,9 +113,9 @@ export const App: React.FC = () => {
       case 'triage':
         return <CareFrontdoor />;
       case 'vituo':
-        return <NearbyFacilities />;
+        return <NearbyFacilities onBack={handleBackToPatientTriage} />;
       case 'miadi':
-        return <MyAppointment />;
+        return <MyAppointment onBack={handleBackToPatientTriage} />;
       case 'hospital':
         if (selectedHospitalRequestId) {
           return (
@@ -72,7 +125,12 @@ export const App: React.FC = () => {
             />
           );
         }
-        return <HospitalDashboard onOpenDetail={handleOpenHospitalDetail} />;
+        return (
+          <HospitalDashboard
+            onOpenDetail={handleOpenHospitalDetail}
+            onBack={handleBackToPatientTriage}
+          />
+        );
       default:
         return <CareFrontdoor />;
     }
@@ -89,7 +147,7 @@ export const App: React.FC = () => {
       </main>
 
       {/* Sticky Bottom Navigation Bar */}
-      <BottomNav />
+      <BottomNav onTabSelect={handleTabSelect} />
 
       {/* Global Modals and Notifications */}
       <Toast />

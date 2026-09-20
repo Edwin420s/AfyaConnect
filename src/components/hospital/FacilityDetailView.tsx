@@ -14,6 +14,7 @@ export const FacilityDetailView: React.FC<FacilityDetailViewProps> = ({ requestI
     updateRequestDepartment,
     showToast,
     setActivePatientTab,
+    setCurrentRole,
   } = useApp();
 
   const req = careRequests.find(r => r.id === requestId) || careRequests[0];
@@ -74,8 +75,12 @@ export const FacilityDetailView: React.FC<FacilityDetailViewProps> = ({ requestI
         </button>
 
         <button
-          onClick={() => setActivePatientTab('miadi')}
-          className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
+          onClick={() => {
+            onBack();
+            setCurrentRole('patient');
+            setActivePatientTab('miadi');
+          }}
+          className="text-xs text-primary font-bold hover:underline flex items-center gap-1 active:scale-95 transition-all"
         >
           <span>Ona Mwonekano wa Mgonjwa (View Patient Pass)</span>
           <span className="material-symbols-outlined text-[14px]">arrow_forward</span>

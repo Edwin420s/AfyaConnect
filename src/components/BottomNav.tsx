@@ -1,15 +1,24 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 
-export const BottomNav: React.FC = () => {
-  const { activePatientTab, setActivePatientTab, setCurrentRole } = useApp();
+interface BottomNavProps {
+  onTabSelect?: (tab: 'triage' | 'vituo' | 'miadi' | 'hospital') => void;
+}
+
+export const BottomNav: React.FC<BottomNavProps> = ({ onTabSelect }) => {
+  const { currentRole, activePatientTab, setActivePatientTab, setCurrentRole } = useApp();
 
   const handleTabClick = (tab: 'triage' | 'vituo' | 'miadi' | 'hospital') => {
-    setActivePatientTab(tab);
-    if (tab === 'hospital') {
-      setCurrentRole('hospital');
+    if (onTabSelect) {
+      onTabSelect(tab);
     } else {
-      setCurrentRole('patient');
+      if (tab === 'hospital') {
+        setCurrentRole('hospital');
+        setActivePatientTab('hospital');
+      } else {
+        setCurrentRole('patient');
+        setActivePatientTab(tab);
+      }
     }
   };
 
@@ -24,7 +33,10 @@ export const BottomNav: React.FC = () => {
     <nav className="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.06)] border-t border-surface-container-high/60">
       <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-2">
         {navItems.map(item => {
-          const isActive = activePatientTab === item.id;
+          const isActive =
+            currentRole === 'patient'
+              ? activePatientTab === item.id
+              : currentRole === 'hospital' && item.id === 'hospital';
           return (
             <button
               key={item.id}
